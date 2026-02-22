@@ -45,8 +45,8 @@ Material:
     - _AngleStart: 135
     - _EnableExternalAlpha: 0
     - _Feather: 0.005
-    - _InnerRadius: 0.35
-    - _OuterRadius: 1
+    - _InnerRadius: 0.386
+    - _OuterRadius: 0.93
     - _Rotation: 0
     - _ZWrite: 0
     m_Colors:
