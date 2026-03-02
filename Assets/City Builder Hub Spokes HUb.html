@@ -1,0 +1,3832 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Digital Twin: AR City Planner</title>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            /* Colors */
+            --bg: #000000;
+            --panel: rgba(0, 0, 0, 0.95);
+            --panel-border: rgba(0, 255, 255, 0.5);
+            --text: #ffffff;
+            --text-dim: #00ffff;
+            --accent: #00ffff;
+            --accent-glow: #ff00ff;
+            --green: #00ff88;
+            --yellow: #ffff00;
+            --cyan: #00ffff;
+            --red: #ff0066;
+            --pink: #ff00ff;
+            --orange: #ff6600;
+            --blue: #0066ff;
+            --purple: #9d00ff;
+            
+            /* Unified Sizes */
+            --spacing-xs: 4px;
+            --spacing-sm: 8px;
+            --spacing-md: 16px;
+            --spacing-lg: 24px;
+            --spacing-xl: 32px;
+            --spacing-2xl: 40px;
+            
+            /* Border */
+            --border-width: 2px;
+            --border-radius: 12px;
+            
+            /* Font Sizes */
+            --font-xs: 8px;
+            --font-sm: 9px;
+            --font-base: 12px;
+            --font-md: 14px;
+            --font-lg: 18px;
+            --font-xl: 1.3rem;
+            --font-2xl: 1.4rem;
+            
+            /* Opacity */
+            --opacity-dim: 0.4;
+            --opacity-mid: 0.5;
+            --opacity-bright: 0.6;
+            --opacity-glow: 0.3;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        @keyframes gradientShift {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+        }
+
+        @keyframes particleFloat {
+            0%, 100% { transform: translate(0, 0) scale(1); opacity: 0.3; }
+            33% { transform: translate(30px, -30px) scale(1.2); opacity: 0.6; }
+            66% { transform: translate(-20px, 20px) scale(0.8); opacity: 0.4; }
+        }
+
+        @keyframes glowPulse {
+            0%, 100% { box-shadow: 0 0 20px currentColor, 0 0 40px currentColor, 0 0 60px currentColor; }
+            50% { box-shadow: 0 0 30px currentColor, 0 0 60px currentColor, 0 0 90px currentColor; }
+        }
+
+        @keyframes scanline {
+            0% { transform: translateY(-100%); }
+            100% { transform: translateY(100vh); }
+        }
+
+        @keyframes glitch {
+            0%, 100% { transform: translate(0); }
+            20% { transform: translate(-2px, 2px); }
+            40% { transform: translate(-2px, -2px); }
+            60% { transform: translate(2px, 2px); }
+            80% { transform: translate(2px, -2px); }
+        }
+
+        @keyframes wavePulse {
+            0%, 100% {
+                transform: scale(1);
+                opacity: 0.4;
+            }
+            50% {
+                transform: scale(1.5);
+                opacity: 0.2;
+            }
+        }
+
+        @keyframes wavePulse2 {
+            0%, 100% {
+                transform: scale(0.8);
+                opacity: 0.3;
+            }
+            50% {
+                transform: scale(1.8);
+                opacity: 0.1;
+            }
+        }
+
+        @keyframes wavePulse3 {
+            0%, 100% {
+                transform: scale(1.2);
+                opacity: 0.35;
+            }
+            50% {
+                transform: scale(1.6);
+                opacity: 0.15;
+            }
+        }
+
+        @keyframes waveMove {
+            0% {
+                transform: translate(0, 0) scale(1);
+            }
+            33% {
+                transform: translate(5%, 5%) scale(1.1);
+            }
+            66% {
+                transform: translate(-3%, 3%) scale(0.95);
+            }
+            100% {
+                transform: translate(0, 0) scale(1);
+            }
+        }
+
+        body {
+            background: linear-gradient(135deg, #000000 0%, #0a0015 30%, #000428 60%, #000000 100%);
+            background-attachment: fixed;
+            color: var(--text);
+            font-family: 'Outfit', sans-serif;
+            height: 100vh;
+            width: 100vw;
+            overflow: hidden;
+            user-select: none;
+            display: flex;
+            flex-direction: column;
+            position: relative;
+        }
+
+        /* Pulsing Wave Background - CSS Only, Performant */
+        body::before {
+            content: '';
+            position: fixed;
+            inset: 0;
+            background: 
+                radial-gradient(circle at 20% 30%, rgba(0, 255, 255, 0.4) 0%, transparent 50%),
+                radial-gradient(circle at 80% 70%, rgba(0, 150, 255, 0.35) 0%, transparent 50%),
+                radial-gradient(circle at 50% 50%, rgba(100, 0, 255, 0.3) 0%, transparent 60%);
+            animation: wavePulse 6s ease-in-out infinite, waveMove 20s ease-in-out infinite;
+            pointer-events: none;
+            z-index: 0;
+            filter: blur(80px);
+            will-change: transform, opacity;
+        }
+
+        body::after {
+            content: '';
+            position: fixed;
+            inset: 0;
+            background: 
+                radial-gradient(circle at 60% 40%, rgba(0, 200, 255, 0.3) 0%, transparent 45%),
+                radial-gradient(circle at 30% 80%, rgba(0, 102, 255, 0.35) 0%, transparent 50%),
+                radial-gradient(circle at 70% 20%, rgba(157, 0, 255, 0.25) 0%, transparent 55%);
+            animation: wavePulse2 8s ease-in-out infinite, waveMove 25s ease-in-out infinite reverse;
+            pointer-events: none;
+            z-index: 0;
+            filter: blur(100px);
+            will-change: transform, opacity;
+            opacity: 0.6;
+        }
+
+
+        /* SVG Icon Utilities */
+        .icon-svg {
+            width: 100%;
+            height: 100%;
+            fill: none;
+            stroke: currentColor;
+            stroke-width: 2;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+            filter: drop-shadow(0 0 4px currentColor);
+        }
+
+        /* --- UI BARS --- */
+        .ui-bar {
+            background: 
+                repeating-linear-gradient(90deg, transparent, transparent 20px, rgba(0, 255, 255, 0.05) 20px, rgba(0, 255, 255, 0.05) 21px),
+                linear-gradient(135deg, var(--panel) 0%, rgba(10, 0, 20, 0.95) 100%);
+            backdrop-filter: blur(40px) saturate(200%);
+            -webkit-backdrop-filter: blur(40px) saturate(200%);
+            border: var(--border-width) solid var(--panel-border);
+            border-top: var(--border-width) solid rgba(255, 0, 255, var(--opacity-mid));
+            z-index: 100;
+            display: flex;
+            align-items: center;
+            padding: 0 var(--spacing-xl);
+            box-shadow: 
+                0 4px 40px rgba(0, 0, 0, 0.9),
+                0 0 80px rgba(0, 255, 255, var(--opacity-glow)),
+                0 0 120px rgba(255, 0, 255, 0.2),
+                inset 0 1px 0 rgba(255, 255, 255, 0.2),
+                inset 0 -1px 0 rgba(0, 255, 255, 0.1);
+            width: 100%;
+            position: relative;
+        }
+
+        .ui-bar::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(90deg, 
+                transparent 0%, 
+                rgba(0, 255, 255, 0.15) 50%, 
+                transparent 100%);
+            animation: gradientShift 6s ease infinite;
+            pointer-events: none;
+        }
+
+        .ui-bar::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 1px;
+            background: linear-gradient(90deg, 
+                transparent 0%, 
+                rgba(0, 255, 255, 0.8) 50%, 
+                transparent 100%);
+            animation: gradientShift 3s ease infinite;
+            box-shadow: 0 0 20px rgba(0, 255, 255, 0.6);
+        }
+
+        #ui-top {
+            min-height: 64px;
+            height: auto;
+            justify-content: center;
+            gap: var(--spacing-xl);
+            flex-wrap: wrap;
+            border-bottom: var(--border-width) solid var(--panel-border);
+            border-top: var(--border-width) solid rgba(255, 0, 255, var(--opacity-mid));
+            flex-shrink: 0;
+            z-index: 200;
+            text-align: center;
+            box-shadow: 
+                0 0 40px rgba(0, 255, 255, 0.2),
+                0 0 60px rgba(255, 0, 255, 0.15);
+        }
+
+        /* METRICS BAR */
+        #metrics-bar {
+            min-height: 70px;
+            padding: var(--spacing-md) var(--spacing-xl);
+            background: transparent;
+            border: none;
+            border-radius: var(--border-radius);
+            z-index: 190;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: var(--spacing-2xl);
+            backdrop-filter: none;
+            -webkit-backdrop-filter: none;
+            flex-shrink: 0;
+            position: relative;
+            box-shadow: none;
+            width: calc(100% - 80px);
+            max-width: 960px;
+            margin: 0 auto;
+            flex-wrap: wrap;
+            overflow: hidden;
+        }
+
+        #metrics-bar::before {
+            display: none;
+        }
+
+        #metrics-bar::after {
+            display: none;
+        }
+
+        .metric-group {
+            display: flex;
+            flex-direction: column;
+            width: 140px;
+            gap: var(--spacing-sm);
+        }
+
+        .metric-header {
+            display: flex;
+            justify-content: space-between;
+            font-size: var(--font-base);
+            text-transform: uppercase;
+            font-weight: 700;
+            color: var(--text-dim);
+            letter-spacing: 0.5px;
+        }
+
+        .metric-track {
+            height: 10px;
+            background: rgba(0, 0, 0, 0.6);
+            border-radius: var(--border-radius);
+            overflow: hidden;
+            border: var(--border-width) solid var(--panel-border);
+            box-shadow: 
+                inset 0 2px 4px rgba(0, 0, 0, 0.8),
+                0 0 10px rgba(0, 255, 255, 0.2);
+        }
+
+        .metric-fill {
+            height: 100%;
+            width: 0%;
+            transition: width 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+            background: linear-gradient(90deg, currentColor 0%, rgba(255, 255, 255, 1) 50%, currentColor 100%);
+            box-shadow: 
+                0 0 20px currentColor,
+                0 0 40px currentColor,
+                0 0 60px currentColor,
+                inset 0 0 15px rgba(255, 255, 255, 0.5);
+            position: relative;
+            overflow: hidden;
+            filter: brightness(1.2);
+        }
+
+        .metric-fill::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, 
+                transparent 0%, 
+                rgba(255, 255, 255, 0.4) 50%, 
+                transparent 100%);
+            animation: gradientShift 2s ease infinite;
+        }
+
+        #ui-bottom {
+            height: 130px;
+            justify-content: center;
+            gap: var(--spacing-sm);
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            z-index: 100;
+            background: 
+                repeating-linear-gradient(90deg, transparent, transparent 25px, rgba(0, 255, 255, 0.05) 25px, rgba(0, 255, 255, 0.05) 26px),
+                linear-gradient(to top, 
+                var(--panel) 0%, 
+                rgba(10, 0, 20, 0.95) 50%,
+                var(--panel) 100%);
+            padding: 10px 0;
+            border-top: var(--border-width) solid var(--panel-border);
+            box-shadow: 
+                0 -8px 40px rgba(0, 0, 0, 0.8),
+                0 0 80px rgba(0, 255, 255, var(--opacity-glow)),
+                0 0 120px rgba(255, 0, 255, 0.2),
+                inset 0 1px 0 rgba(255, 255, 255, 0.2),
+                inset 0 0 30px rgba(0, 255, 255, 0.1);
+        }
+
+        #ui-bottom::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 2px;
+            background: linear-gradient(90deg, 
+                transparent 0%, 
+                rgba(0, 255, 255, 0.8) 50%, 
+                transparent 100%);
+            animation: gradientShift 3s ease infinite;
+            box-shadow: 0 0 20px rgba(0, 255, 255, 0.8);
+        }
+
+        #palette {
+            display: flex; align-items: center; gap: var(--spacing-md); height: 100%; width: 100%;
+            justify-content: center; overflow-x: auto; padding: 0 var(--spacing-lg);
+        }
+
+        .top-module { display: flex; align-items: center; gap: var(--spacing-lg); }
+        
+        .timer-display {
+            font-family: 'JetBrains Mono'; font-size: var(--font-xl); font-weight: 700;
+            color: var(--text); display: flex; align-items: center; gap: 10px; letter-spacing: 1px;
+        }
+        
+        .timer-icon { width: 20px; height: 20px; color: var(--accent); }
+        .timer-display.warning { color: var(--red); animation: pulse 1s infinite; }
+        
+        .score-pill {
+            background: linear-gradient(135deg, 
+                rgba(0, 255, 255, 0.15) 0%, 
+                rgba(255, 0, 255, 0.15) 100%);
+            border: var(--border-width) solid var(--panel-border);
+            padding: 10px var(--spacing-lg);
+            border-radius: var(--border-radius);
+            display: flex;
+            align-items: center;
+            gap: var(--spacing-md);
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            backdrop-filter: blur(15px);
+            box-shadow: 
+                0 4px 15px rgba(0, 0, 0, 0.5),
+                0 0 30px rgba(0, 255, 255, var(--opacity-dim)),
+                0 0 50px rgba(255, 0, 255, var(--opacity-glow)),
+                inset 0 0 20px rgba(0, 255, 255, 0.1);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .score-pill::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(135deg, 
+                rgba(0, 212, 255, 0.2) 0%, 
+                rgba(0, 102, 255, 0.2) 100%);
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+
+        .score-pill:hover::before {
+            opacity: 1;
+        }
+
+        .score-pill:hover {
+            background: linear-gradient(135deg, 
+                rgba(0, 255, 255, 0.3) 0%, 
+                rgba(255, 0, 255, 0.3) 100%);
+            border-color: var(--accent);
+            transform: translateY(-2px);
+            box-shadow: 
+                0 8px 25px rgba(0, 0, 0, 0.6),
+                0 0 60px rgba(0, 255, 255, 0.6),
+                0 0 100px rgba(255, 0, 255, 0.5),
+                inset 0 0 30px rgba(0, 255, 255, 0.2);
+            animation: glitch 0.3s ease;
+        }
+        
+        .coin-icon { width: 18px; height: 18px; color: var(--yellow); }
+        
+        /* Building Cards */
+        .building-card {
+            background: 
+                repeating-linear-gradient(45deg, transparent, transparent 5px, rgba(0, 255, 255, 0.05) 5px, rgba(0, 255, 255, 0.05) 6px),
+                linear-gradient(135deg, 
+                var(--panel) 0%, 
+                rgba(10, 0, 20, 0.95) 100%);
+            border: var(--border-width) solid var(--panel-border);
+            border-radius: var(--border-radius);
+            cursor: grab;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            position: relative;
+            overflow: hidden;
+            padding: var(--spacing-sm) var(--spacing-xs);
+            width: 80px;
+            height: 90px;
+            flex-shrink: 0;
+            backdrop-filter: blur(15px);
+            box-shadow: 
+                0 4px 15px rgba(0, 0, 0, 0.6),
+                0 0 30px rgba(0, 255, 255, var(--opacity-glow)),
+                0 0 50px rgba(255, 0, 255, 0.2),
+                inset 0 0 20px rgba(0, 255, 255, 0.1);
+        }
+
+        .building-card::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: radial-gradient(circle at center, 
+                rgba(0, 212, 255, 0.2) 0%, 
+                rgba(0, 102, 255, 0.1) 50%,
+                transparent 100%);
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+
+        .building-card::after {
+            content: '';
+            position: absolute;
+            inset: -2px;
+            background: linear-gradient(135deg, 
+                rgba(0, 212, 255, 0.5), 
+                rgba(0, 102, 255, 0.5),
+                rgba(255, 0, 255, 0.5));
+            border-radius: var(--border-radius);
+            opacity: 0;
+            transition: opacity 0.3s;
+            z-index: -1;
+            filter: blur(8px);
+        }
+
+        .building-card:hover::before { opacity: 1; }
+        .building-card:hover::after { opacity: 0.6; }
+        
+        .building-card:hover { 
+            border-color: var(--accent);
+            background: linear-gradient(135deg, 
+                rgba(0, 255, 255, 0.25) 0%, 
+                rgba(255, 0, 255, 0.25) 100%);
+            box-shadow: 
+                0 8px 30px rgba(0, 0, 0, 0.7),
+                0 0 60px rgba(0, 255, 255, 0.6),
+                0 0 100px rgba(255, 0, 255, 0.5),
+                0 0 150px rgba(0, 102, 255, 0.4),
+                inset 0 0 40px rgba(0, 255, 255, 0.3);
+            transform: translateY(-5px) scale(1.05);
+            animation: glitch 0.4s ease;
+        }
+
+        .building-card:active {
+            transform: translateY(-2px) scale(0.97);
+        }
+
+        .building-card.disabled {
+            opacity: 0.25;
+            cursor: not-allowed;
+            transform: none !important;
+            box-shadow: none !important;
+            filter: grayscale(0.8);
+        }
+        
+        /* Size Variants */
+        .building-card.small { width: 70px; height: 80px; }
+        .building-card.large { width: 85px; height: 92px; border-width: 1px; box-shadow: inset 0 0 0 1px var(--panel-border); }
+        
+        .bc-icon { width: 24px; height: 24px; margin-bottom: 5px; display: flex; align-items: center; justify-content: center; }
+        .bc-name { font-size: var(--font-sm); font-weight: 600; text-align: center; line-height: 1.1; letter-spacing: 0.4px; text-transform: uppercase; color: var(--text-dim); }
+        .bc-cost { font-size: var(--font-sm); font-family: 'JetBrains Mono'; color: var(--text-dim); margin-top: 3px; opacity: 0.8; }
+        .bc-color-strip { position: absolute; bottom: 0; left: 0; right: 0; height: 3px; }
+        .bc-size-badge { position: absolute; top: 4px; right: 5px; font-size: 8px; font-weight: 700; opacity: 0.5; letter-spacing: 0.5px; }
+
+        /* Game Area */
+        #game-wrapper {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            position: relative;
+            width: 100%;
+            overflow: hidden;
+            padding-bottom: 130px;
+            z-index: 1;
+        }
+
+        #game-container {
+            flex: 1;
+            position: relative;
+            width: 100%;
+            min-height: 0;
+            background: #000000;
+            overflow: hidden;
+            border-top: 2px solid rgba(0, 255, 255, 0.3);
+            box-shadow: inset 0 0 120px rgba(0, 255, 255, 0.08);
+        }
+
+        #game-container::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: 
+                radial-gradient(ellipse at 50% 50%, rgba(0, 255, 255, 0.15) 0%, transparent 60%),
+                radial-gradient(ellipse at 20% 30%, rgba(0, 150, 255, 0.12) 0%, transparent 65%),
+                radial-gradient(ellipse at 80% 70%, rgba(100, 0, 255, 0.1) 0%, transparent 70%);
+            animation: wavePulse3 7s ease-in-out infinite;
+            pointer-events: none;
+            z-index: 1;
+            filter: blur(60px);
+            will-change: transform, opacity;
+        }
+
+
+        #game-container.active { display: block; }
+        #game-container:active { cursor: grabbing; }
+
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+            cursor: crosshair;
+            object-fit: contain;
+        }
+
+        canvas.can-grab { cursor: grab; }
+        canvas.grabbing { cursor: grabbing; }
+
+        /* Start Screen */
+        .screen {
+            position: fixed;
+            inset: 0;
+            z-index: 1000;
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            background: 
+                repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0, 255, 255, 0.05) 2px, rgba(0, 255, 255, 0.05) 4px),
+                repeating-linear-gradient(90deg, transparent, transparent 2px, rgba(0, 102, 255, 0.05) 2px, rgba(0, 102, 255, 0.05) 4px),
+                radial-gradient(ellipse at 30% 40%, rgba(0, 255, 255, 0.25) 0%, transparent 50%),
+                radial-gradient(ellipse at 70% 60%, rgba(0, 102, 255, 0.25) 0%, transparent 50%),
+                radial-gradient(ellipse at 50% 50%, rgba(0, 102, 255, 0.2) 0%, transparent 70%),
+                radial-gradient(ellipse at center, #0a0015 0%, #000000 70%);
+            background-size: 40px 40px, 40px 40px, 100% 100%, 100% 100%, 100% 100%, 100% 100%;
+            animation: gradientShift 15s ease infinite, dataFlow 25s linear infinite;
+        }
+
+        .screen::after {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(
+                transparent 50%,
+                rgba(0, 255, 255, 0.05) 50%
+            );
+            background-size: 100% 4px;
+            animation: scanline 6s linear infinite;
+            pointer-events: none;
+            mix-blend-mode: overlay;
+        }
+
+        .screen.active {
+            display: flex;
+            animation: fadeIn 0.4s ease-out;
+        }
+
+        #start-screen {
+            position: fixed;
+            inset: 0;
+            z-index: 1000;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: var(--spacing-2xl);
+            background: 
+                repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0, 255, 255, 0.03) 2px, rgba(0, 255, 255, 0.03) 4px),
+                repeating-linear-gradient(90deg, transparent, transparent 2px, rgba(0, 102, 255, 0.03) 2px, rgba(0, 102, 255, 0.03) 4px),
+                radial-gradient(ellipse at 20% 50%, rgba(0, 102, 255, 0.25) 0%, transparent 50%),
+                radial-gradient(ellipse at 80% 80%, rgba(0, 255, 255, 0.25) 0%, transparent 50%),
+                radial-gradient(ellipse at 40% 20%, rgba(0, 102, 255, 0.2) 0%, transparent 50%),
+                linear-gradient(135deg, #000000 0%, #0a0015 50%, #000000 100%);
+            background-size: 40px 40px, 40px 40px, 100% 100%, 100% 100%, 100% 100%, 100% 100%;
+            background-attachment: fixed;
+            animation: gradientShift 15s ease infinite, dataFlow 20s linear infinite;
+            transition: opacity 0.4s;
+        }
+        
+        #start-screen::before {
+            content: '';
+            position: fixed;
+            inset: 0;
+            background: 
+                radial-gradient(circle at 30% 40%, rgba(0, 255, 255, 0.15) 0%, transparent 50%),
+                radial-gradient(circle at 70% 60%, rgba(0, 102, 255, 0.15) 0%, transparent 50%),
+                radial-gradient(circle at 50% 50%, rgba(0, 102, 255, 0.1) 0%, transparent 70%);
+            animation: particleFloat 20s ease-in-out infinite;
+            pointer-events: none;
+            z-index: 0;
+        }
+        
+        #start-screen::after {
+            content: '';
+            position: fixed;
+            inset: 0;
+            background: linear-gradient(
+                transparent 50%,
+                rgba(0, 255, 255, 0.03) 50%
+            );
+            background-size: 100% 4px;
+            animation: scanline 8s linear infinite;
+            pointer-events: none;
+            z-index: 9999;
+            mix-blend-mode: overlay;
+        }
+        
+        #start-screen.hidden { opacity: 0; pointer-events: none; }
+        
+        .hero-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: var(--spacing-md);
+            position: relative;
+            z-index: 1;
+            padding: var(--spacing-xl);
+        }
+        
+        .title-hero {
+            font-size: 4.5rem;
+            font-weight: 800;
+            letter-spacing: -2px;
+            line-height: 1.1;
+            background: linear-gradient(135deg, 
+                #ffffff 0%, 
+                var(--cyan) 25%,
+                var(--blue) 50%,
+                var(--cyan) 75%,
+                var(--blue) 100%);
+            background-size: 200% 200%;
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+            position: relative;
+            animation: gradientShift 3s ease infinite, glitch 8s ease infinite;
+            filter: 
+                drop-shadow(0 0 40px rgba(0, 255, 255, 0.8))
+                drop-shadow(0 0 80px rgba(0, 102, 255, 0.6))
+                drop-shadow(0 0 120px rgba(0, 102, 255, 0.4));
+            margin-bottom: var(--spacing-sm);
+        }
+        
+        .title-sub {
+            letter-spacing: 6px;
+            color: var(--text-dim);
+            text-transform: uppercase;
+            font-size: var(--font-base);
+            font-weight: 500;
+            margin-top: 0;
+            opacity: 0.9;
+        }
+
+        .menu-btn {
+            background: 
+                repeating-linear-gradient(45deg, transparent, transparent 5px, rgba(0, 255, 255, 0.1) 5px, rgba(0, 255, 255, 0.1) 6px),
+                linear-gradient(135deg, 
+                rgba(0, 255, 255, 0.15) 0%, 
+                rgba(0, 102, 255, 0.15) 100%);
+            border: 2px solid rgba(0, 255, 255, 0.6);
+            padding: 16px 40px;
+            border-radius: var(--border-radius);
+            color: var(--text);
+            font-size: 0.9rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            font-family: 'Outfit', sans-serif;
+            position: relative;
+            overflow: hidden;
+            backdrop-filter: blur(15px);
+                box-shadow: 
+                0 4px 15px rgba(0, 0, 0, 0.5),
+                0 0 40px rgba(0, 255, 255, 0.4),
+                0 0 60px rgba(0, 102, 255, 0.3),
+                inset 0 0 20px rgba(0, 255, 255, 0.1);
+        }
+
+        .menu-btn::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(135deg, 
+                transparent 0%, 
+                rgba(0, 212, 255, 0.3) 50%, 
+                transparent 100%);
+            transform: translateX(-100%);
+            transition: transform 0.5s;
+        }
+
+        .menu-btn:hover::before { transform: translateX(100%); }
+
+        .menu-btn:hover {
+            border-color: var(--accent);
+            background: linear-gradient(135deg, 
+                rgba(0, 255, 255, 0.3) 0%, 
+                rgba(0, 102, 255, 0.3) 100%);
+            transform: translateY(-3px) scale(1.02);
+            box-shadow: 
+                0 10px 30px rgba(0, 0, 0, 0.6),
+                0 0 60px rgba(0, 255, 255, 0.6),
+                0 0 100px rgba(0, 102, 255, 0.5),
+                0 0 150px rgba(0, 102, 255, 0.4);
+            animation: glitch 0.4s ease;
+        }
+
+        .menu-btn.primary {
+            background: linear-gradient(135deg, var(--cyan) 0%, var(--blue) 100%);
+            border-color: var(--cyan);
+            color: #000;
+            box-shadow: 
+                0 4px 15px rgba(0, 0, 0, 0.5),
+                0 0 50px rgba(0, 255, 255, 0.6),
+                0 0 80px rgba(0, 102, 255, 0.5);
+        }
+
+        .menu-btn.primary:hover {
+            background: linear-gradient(135deg, var(--blue) 0%, var(--cyan) 100%);
+            box-shadow: 
+                0 10px 35px rgba(0, 0, 0, 0.7),
+                0 0 80px rgba(0, 102, 255, 0.8),
+                0 0 120px rgba(0, 102, 255, 0.6),
+                0 0 180px rgba(0, 255, 255, 0.4);
+            animation: glitch 0.5s ease;
+        }
+        
+        .header-btn {
+            background: linear-gradient(135deg, 
+                rgba(0, 255, 255, 0.15) 0%, 
+                rgba(255, 0, 255, 0.15) 100%);
+            border: 2px solid rgba(0, 255, 255, 0.5);
+            color: var(--text-dim);
+            width: 36px;
+            height: 36px;
+            border-radius: var(--border-radius);
+            cursor: pointer;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            backdrop-filter: blur(15px);
+            box-shadow: 
+                0 2px 10px rgba(0, 0, 0, 0.5),
+                0 0 20px rgba(0, 255, 255, 0.3);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .header-btn::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(135deg, 
+                rgba(0, 212, 255, 0.3) 0%, 
+                rgba(0, 102, 255, 0.3) 100%);
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+
+        .header-btn:hover::before {
+            opacity: 1;
+        }
+
+        .header-btn:hover {
+            color: var(--text);
+            border-color: var(--accent);
+            background: linear-gradient(135deg, 
+                rgba(0, 255, 255, 0.3) 0%, 
+                rgba(255, 0, 255, 0.3) 100%);
+            box-shadow: 
+                0 4px 15px rgba(0, 0, 0, 0.6),
+                0 0 40px rgba(0, 255, 255, 0.6),
+                0 0 80px rgba(255, 0, 255, 0.5);
+            transform: translateY(-2px) scale(1.05);
+            animation: glitch 0.3s ease;
+        }
+
+        /* Toast & Overlay */
+        #feedback-toast {
+            position: absolute;
+            top: 20%;
+            left: 50%;
+            transform: translateX(-50%) translateY(-20px);
+            background: 
+                repeating-linear-gradient(45deg, transparent, transparent 5px, rgba(0, 255, 255, 0.05) 5px, rgba(0, 255, 255, 0.05) 6px),
+                linear-gradient(135deg, 
+                rgba(0, 0, 0, 0.98) 0%, 
+                rgba(10, 0, 20, 0.98) 100%);
+            border: 2px solid var(--accent);
+            padding: 14px 28px;
+            border-radius: var(--border-radius);
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            opacity: 0;
+            pointer-events: none;
+            transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+            z-index: 500;
+            box-shadow: 
+                0 8px 35px rgba(0, 0, 0, 0.8),
+                0 0 80px rgba(0, 255, 255, 0.5),
+                0 0 120px rgba(255, 0, 255, 0.4),
+                inset 0 1px 0 rgba(255, 255, 255, 0.2);
+            backdrop-filter: blur(30px) saturate(200%);
+            -webkit-backdrop-filter: blur(30px) saturate(200%);
+        }
+        #feedback-toast.visible { opacity: 1; transform: translateX(-50%) translateY(0); }
+        
+        #result-overlay {
+            position: fixed;
+            inset: 0;
+            background: 
+                radial-gradient(ellipse at 50% 50%, rgba(0, 212, 255, 0.1) 0%, transparent 70%),
+                radial-gradient(ellipse at 20% 30%, rgba(0, 102, 255, 0.1) 0%, transparent 70%),
+                rgba(0, 0, 0, 0.97);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 2000;
+            flex-direction: column;
+            backdrop-filter: blur(20px) saturate(150%);
+            -webkit-backdrop-filter: blur(20px) saturate(150%);
+        }
+        #result-overlay.active { display: flex; animation: fadeIn 0.5s ease-out; }
+        .final-score {
+            font-size: 8rem;
+            font-weight: 800;
+            margin: 20px 0;
+            font-family: 'JetBrains Mono';
+            background: linear-gradient(135deg, 
+                var(--cyan) 0%, 
+                var(--pink) 25%,
+                var(--blue) 50%,
+                var(--cyan) 75%,
+                var(--pink) 100%);
+            background-size: 200% 200%;
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+            animation: 
+                scoreReveal 0.7s cubic-bezier(0.4, 0, 0.2, 1),
+                gradientShift 2s ease infinite,
+                glitch 10s ease infinite;
+            filter: 
+                drop-shadow(0 0 40px rgba(0, 255, 255, 0.8))
+                drop-shadow(0 0 80px rgba(255, 0, 255, 0.6))
+                drop-shadow(0 0 120px rgba(0, 102, 255, 0.4));
+        }
+
+        @keyframes scoreReveal {
+            from { opacity: 0; transform: scale(0.6); }
+            to { opacity: 1; transform: scale(1); }
+        }
+
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        
+        /* Map Controls */
+        #map-controls {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            width: 100%;
+            padding: 10px 28px 14px;
+            background: 
+                repeating-linear-gradient(90deg, transparent, transparent 30px, rgba(0, 255, 255, 0.05) 30px, rgba(0, 255, 255, 0.05) 31px),
+                linear-gradient(135deg, 
+                rgba(0, 0, 0, 0.95) 0%, 
+                rgba(10, 0, 20, 0.95) 100%);
+            border-top: 2px solid rgba(0, 255, 255, 0.5);
+            border-bottom: 2px solid rgba(255, 0, 255, 0.4);
+            gap: 14px;
+            z-index: 90;
+            flex-shrink: 0;
+            backdrop-filter: blur(30px) saturate(200%);
+            -webkit-backdrop-filter: blur(30px) saturate(200%);
+            box-shadow: 
+                0 -4px 20px rgba(0, 0, 0, 0.5),
+                0 4px 20px rgba(0, 0, 0, 0.5),
+                0 0 40px rgba(0, 255, 255, 0.2),
+                inset 0 1px 0 rgba(255, 255, 255, 0.1);
+            pointer-events: none;
+        }
+        
+        /* Tip System */
+        #tip-status-wrapper {
+            width: 100%;
+            display: flex;
+            justify-content: center;
+            min-height: 32px;
+            align-items: center;
+        }
+
+        #tip-status-bar {
+            width: min(820px, 100%);
+            background: transparent;
+            border: none;
+            box-shadow: none;
+            backdrop-filter: none;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 6px 14px;
+            opacity: 0;
+            visibility: hidden;
+            pointer-events: none;
+            transition: opacity 0.25s ease;
+        }
+
+        #tip-status-bar.visible {
+            opacity: 1;
+            visibility: visible;
+        }
+
+        #tip-status-bar.warning { border-color: rgba(234,179,8,0.4); }
+        #tip-status-bar.info { border-color: rgba(6,182,212,0.4); }
+        #tip-status-bar.success { border-color: rgba(34,197,94,0.35); }
+        #tip-status-bar.critical { border-color: rgba(249,115,22,0.45); }
+
+        .tip-status-icon {
+            width: 20px;
+            height: 20px;
+            border-radius: calc(var(--border-radius) * 0.25);
+            font-size: 11px;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #0c111d;
+            background: rgba(6,182,212,0.85);
+        }
+
+        #tip-status-bar.warning .tip-status-icon { background: rgba(234,179,8,0.9); }
+        #tip-status-bar.success .tip-status-icon { background: rgba(34,197,94,0.9); }
+        #tip-status-bar.critical .tip-status-icon { background: rgba(249,115,22,0.9); color:#1f130b; }
+
+        .tip-status-text {
+            font-family: 'JetBrains Mono';
+            font-size: 0.78rem;
+            font-weight: 600;
+            letter-spacing: 0.025em;
+            color: var(--text);
+            text-transform: uppercase;
+            opacity: 0.95;
+        }
+
+        /* Hub Nudge */
+        .hub-nudge {
+            position: absolute;
+            pointer-events: none;
+            opacity: 0;
+            transform: translateY(10px);
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            z-index: 155;
+            --hub-tail: 60px;
+            --nudge-color: var(--accent);
+        }
+
+        .hub-nudge.visible {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        .hub-nudge-body {
+            position: relative;
+            background: linear-gradient(135deg, 
+                rgba(5, 5, 15, 0.96) 0%, 
+                rgba(15, 10, 30, 0.96) 100%);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-left: 3px solid var(--nudge-color);
+            border-radius: var(--border-radius);
+            padding: 10px 14px;
+            font-family: 'JetBrains Mono';
+            font-size: 11px;
+            font-weight: 500;
+            color: var(--text);
+            max-width: 320px;
+            box-shadow: 
+                0 12px 25px rgba(0, 0, 0, 0.6),
+                0 0 30px var(--nudge-color),
+                inset 0 1px 0 rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(20px) saturate(150%);
+        }
+
+        .hub-nudge-header {
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 1.1px;
+            margin-bottom: 4px;
+            font-size: 10px;
+        }
+
+        .hub-nudge-text {
+            font-size: 10px;
+            line-height: 1.4;
+        }
+
+        .hub-nudge-tail {
+            position: absolute;
+            left: 50%;
+            width: 1px;
+            height: var(--hub-tail);
+            transform: translateX(-50%);
+            background: linear-gradient(to bottom, var(--nudge-color), rgba(255,255,255,0));
+            filter: drop-shadow(0 4px 10px rgba(0,0,0,0.4));
+            top: calc(100% + 6px);
+        }
+
+        .hub-nudge-tail::before {
+            content: '';
+            position: absolute;
+            top: -20px;
+            left: 50%;
+            transform: translateX(-50%);
+            border-left: 14px solid transparent;
+            border-right: 14px solid transparent;
+            border-top: 20px solid rgba(8, 8, 14, 0.96);
+            box-shadow: 0 6px 14px rgba(0,0,0,0.45);
+        }
+
+        .hub-nudge.below .hub-nudge-tail {
+            top: auto;
+            bottom: calc(100% + 6px);
+            background: linear-gradient(to top, var(--nudge-color), rgba(255,255,255,0));
+        }
+
+        .hub-nudge.below .hub-nudge-tail::before {
+            top: auto;
+            bottom: -20px;
+            border-top: none;
+            border-bottom: 20px solid rgba(8, 8, 14, 0.96);
+        }
+
+        .hub-nudge.negative { --nudge-color: var(--orange); }
+        .hub-nudge.positive { --nudge-color: var(--green); }
+        .hub-nudge.warning { --nudge-color: var(--yellow); }
+
+        .hub-nudge.negative .hub-nudge-header { color: var(--orange); }
+        .hub-nudge.positive .hub-nudge-header { color: var(--green); }
+        .hub-nudge.warning .hub-nudge-header { color: var(--yellow); }
+
+        /* End-Game Tips */
+        .result-tips {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            margin-top: 20px;
+            margin-bottom: 30px;
+            max-width: 550px;
+            width: 100%;
+        }
+
+        .result-tip {
+            background: linear-gradient(135deg, 
+                rgba(0, 212, 255, 0.1) 0%, 
+                rgba(0, 102, 255, 0.1) 100%);
+            border: 1px solid rgba(0, 212, 255, 0.3);
+            border-radius: var(--border-radius);
+            padding: 14px 18px;
+            display: flex;
+            align-items: flex-start;
+            gap: 12px;
+            animation: tipSlideIn 0.4s ease-out backwards;
+            backdrop-filter: blur(10px);
+            box-shadow: 
+                0 4px 15px rgba(0, 0, 0, 0.3),
+                0 0 20px rgba(0, 212, 255, 0.15);
+        }
+
+        .result-tip:nth-child(1) { animation-delay: 0.3s; }
+        .result-tip:nth-child(2) { animation-delay: 0.5s; }
+        .result-tip:nth-child(3) { animation-delay: 0.7s; }
+
+        @keyframes tipSlideIn {
+            from { opacity: 0; transform: translateX(-20px); }
+            to { opacity: 1; transform: translateX(0); }
+        }
+
+        .tip-icon {
+            width: 24px;
+            height: 24px;
+            border-radius: calc(var(--border-radius) * 0.33);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 14px;
+            flex-shrink: 0;
+        }
+
+        .tip-content {
+            flex: 1;
+        }
+
+        .tip-category {
+            font-size: 0.7rem;
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+            color: var(--text-dim);
+            margin-bottom: 6px;
+            font-weight: 600;
+        }
+
+        .tip-text {
+            font-size: 0.85rem;
+            line-height: 1.5;
+            color: var(--text);
+        }
+        
+        /* Drag Proxy */
+        #drag-preview {
+            position: fixed;
+            pointer-events: none;
+            z-index: 1000;
+            display: none;
+            transform: translate(-50%, -50%);
+        }
+
+        .drag-icon {
+            width: 56px;
+            height: 56px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border: 3px solid;
+            background: linear-gradient(135deg, 
+                rgba(0, 0, 0, 0.95) 0%, 
+                rgba(10, 5, 20, 0.95) 100%);
+            animation: dragPulse 0.7s ease-in-out infinite;
+            padding: 12px;
+            backdrop-filter: blur(10px);
+            box-shadow: 
+                0 4px 20px currentColor,
+                0 0 40px currentColor;
+        }
+
+        @keyframes dragPulse {
+            0%, 100% { 
+                transform: scale(1); 
+                box-shadow: 
+                    0 4px 20px currentColor,
+                    0 0 40px currentColor,
+                    0 0 60px rgba(0, 212, 255, 0.3);
+            }
+            50% { 
+                transform: scale(1.08); 
+                box-shadow: 
+                    0 6px 30px currentColor,
+                    0 0 60px currentColor,
+                    0 0 90px rgba(0, 212, 255, 0.5);
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Start Screen -->
+    <div id="start-screen">
+        <div class="hero-container">
+            <div class="title-hero">DIGITAL TWIN</div>
+            <div class="title-sub">AR Urban Planning Simulation</div>
+        </div>
+        <button class="menu-btn primary" onclick="gameApp.startGame()" style="position: relative; z-index: 1;">
+            <svg class="icon-svg" style="width:20px; height:20px;" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+            Initialize System
+        </button>
+    </div>
+
+    <!-- Settings Modal -->
+    <div id="settings-modal" style="position:fixed; inset:0; background:rgba(0,0,0,0.88); z-index:2000; display:none; align-items:center; justify-content:center; backdrop-filter: blur(10px);">
+        <div style="background: repeating-linear-gradient(45deg, transparent, transparent 10px, rgba(0, 255, 255, 0.05) 10px, rgba(0, 255, 255, 0.05) 11px), linear-gradient(135deg, rgba(0, 0, 0, 0.98) 0%, rgba(10, 0, 20, 0.98) 100%); padding:32px; border:2px solid rgba(0, 255, 255, 0.6); border-radius:0; width:480px; box-shadow: 0 20px 80px rgba(0, 0, 0, 0.9), 0 0 100px rgba(0, 255, 255, 0.4), 0 0 150px rgba(255, 0, 255, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.2), inset 0 0 40px rgba(0, 255, 255, 0.1); backdrop-filter: blur(40px) saturate(200%);">
+            <h3 style="color:var(--accent); margin-bottom:28px; text-transform:uppercase; letter-spacing:3px; font-size:0.9rem; font-weight:600;">Parameters</h3>
+            <div style="display:flex; justify-content:space-between; margin-bottom:22px; align-items:center; font-size:0.95rem; color:#fff;">
+                <span>Starting Budget</span>
+                <input type="range" id="set-budget" min="2000" max="6000" step="250" value="3500" oninput="this.nextElementSibling.innerText = '₸' + this.value" style="flex:1; margin:0 18px; height:6px; border-radius:3px; background:rgba(255,255,255,0.08); outline:none; -webkit-appearance:none; appearance:none;">
+                <span style="width:65px; text-align:right; font-family:'JetBrains Mono'; font-weight:600; color:var(--accent);">₸3500</span>
+            </div>
+            <div style="display:flex; justify-content:flex-end; gap:12px; margin-top:32px; border-top:1px solid rgba(0, 255, 255, 0.4); padding-top:24px;">
+                <button onclick="document.getElementById('settings-modal').style.display='none'" style="padding:8px 16px; background:rgba(0, 255, 255, 0.15); color:#fff; border:2px solid rgba(0, 255, 255, 0.5); border-radius:0; cursor:pointer; font-weight:600; transition:all 0.3s;">Cancel</button>
+                <button onclick="gameApp.applySettings()" style="padding:8px 16px; background:linear-gradient(135deg, var(--cyan) 0%, var(--blue) 100%); color:#000; border:2px solid var(--cyan); border-radius:0; cursor:pointer; font-weight:600; transition:all 0.3s; box-shadow: 0 0 30px rgba(0, 255, 255, 0.4);">Apply</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- UI Structure -->
+    <div id="ui-top" class="ui-bar">
+        <div class="top-module">
+            <div class="timer-display">
+                <div class="timer-icon"><svg class="icon-svg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg></div>
+                <span id="ui-timer">03:00</span>
+            </div>
+            <div class="score-pill" style="border-color: rgba(234, 179, 8, 0.3);">
+                <div class="coin-icon"><svg class="icon-svg" viewBox="0 0 24 24"><path d="M12 2a7 7 0 1 0 10 10"></path><path d="M12 12v-6"></path><path d="M15 9h-6"></path><circle cx="12" cy="12" r="10"></circle></svg></div>
+                <span id="ui-budget" style="font-family:'JetBrains Mono'; font-weight:700;">3500</span>
+            </div>
+        </div>
+
+        <div class="top-module" style="justify-content: center;">
+            <div class="score-pill">
+                <span style="font-size: 0.7rem; text-transform: uppercase; letter-spacing: 1.5px; color: var(--text-dim);">Quality of Life</span>
+                <span id="ui-qol" style="font-family:'JetBrains Mono'; font-weight:700; font-size: 1.4rem; color: var(--cyan);">50</span>
+            </div>
+        </div>
+
+        <div class="top-module">
+            <div style="text-align: right;">
+                <span style="color:var(--text-dim); font-size: 0.7rem; letter-spacing: 1.5px; display:block;">ACCESS</span>
+                <span id="ui-acc" style="color:var(--cyan); font-weight:700;">0%</span>
+            </div>
+            <div style="width: 1px; height: 28px; background: var(--panel-border); margin: 0 12px;"></div>
+            <button class="header-btn" onclick="document.getElementById('settings-modal').style.display='flex'" title="Settings">
+                <svg class="icon-svg" style="width:16px;" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+            </button>
+            <button class="header-btn" onclick="gameApp.regenerateLevel()" title="New Layout">
+                <svg class="icon-svg" style="width:16px;" viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
+            </button>
+        </div>
+    </div>
+
+    <!-- 4-Stat Metrics Bar -->
+    <div id="metrics-bar"></div>
+
+    <!-- Map Controls (with Tip System) -->
+    <div id="map-controls">
+        <div id="tip-status-wrapper">
+            <div id="tip-status-bar">
+                <div class="tip-status-icon" id="tip-status-icon">ℹ</div>
+                <div class="tip-status-text" id="tip-status-text"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Game Area -->
+    <div id="game-wrapper">
+        <div id="game-container">
+            <canvas id="canvas"></canvas>
+        </div>
+    </div>
+
+    <!-- Bottom Palette -->
+    <div id="ui-bottom" class="ui-bar">
+        <div id="palette"></div>
+    </div>
+
+    <!-- Map Controls (with Tip System) -->
+    <div id="map-controls">
+        <div id="tip-status-wrapper">
+            <div id="tip-status-bar">
+                <div class="tip-status-icon" id="tip-status-icon">ℹ</div>
+                <div class="tip-status-text" id="tip-status-text"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tip System -->
+    <div id="hub-nudges-container" style="position: fixed; inset: 0; pointer-events: none; z-index: 150;"></div>
+
+    <!-- Overlay Elements -->
+    <div id="feedback-toast">
+        <div id="toast-icon" style="font-weight:800; font-size:16px;"></div>
+        <span id="toast-msg" style="font-family: 'JetBrains Mono'; font-size: 0.85rem; font-weight: 600; color: #fff;"></span>
+    </div>
+
+    <div id="drag-preview">
+        <div class="drag-icon" id="drag-icon-inner"></div>
+    </div>
+
+    <div id="result-overlay">
+        <div style="font-size: 0.9rem; letter-spacing: 8px; text-transform: uppercase; color: var(--text-dim); margin-bottom: 16px;">Simulation Complete</div>
+        <div class="final-score" id="res-score">00</div>
+        <div style="margin-bottom: 50px; color: #aaa;" id="res-msg">Analysis pending...</div>
+        <div class="result-tips" id="result-tips"></div>
+        <button class="menu-btn primary" onclick="gameApp.showStartScreen()">Reset Simulation</button>
+    </div>
+
+    <script>
+        // --- DATA & CONFIG ---
+        const ICONS = {
+            garden: "M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z", 
+            park: "M17 20h5v-2a3 3 0 0 0-5.3-1.6M16 10a4 4 0 0 1-8 0c0-4 4-5 4-9 0 4 4 5 4 9zM3 20h13v-2a3 3 0 0 0-5.3-1.6",
+            office: "M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z M3 6h18 M16 10a4 4 0 0 1-8 0",
+            factory: "M2 20a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8l-7 5V8l-7 5V4a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2Z",
+            clinic: "M18 10h-4V6a2 2 0 0 0-4 0v4H6a2 2 0 0 0 0 4h4v4a2 2 0 0 0 4 0v-4h4a2 2 0 0 0 0-4z",
+            hospital: "M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z",
+            library: "M12 2l9 4v12l-9 4-9-4V6l9-4z M12 22v-6 M6 18v-7 M18 18v-7", 
+            museum: "M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z",
+        };
+
+        const STATS = [
+            { id: 'env', name: 'Environment', color: '#00ffff' }, // Electric Cyan
+            { id: 'eco', name: 'Economy', color: '#ffaa00' }, // Neon Amber
+            { id: 'saf', name: 'Safety', color: '#0080ff' }, // Electric Blue
+            { id: 'cul', name: 'Culture', color: '#ff00ff' }, // Neon Magenta
+            { id: 'acc', name: 'Access', color: '#00d4ff' } // Light Cyan
+        ];
+
+        // BUILDINGS - Matching Digital Twin 17 structure
+        const BUILDINGS = [
+            { id: 'garden', name: 'Garden', iconKey: 'garden', cost: 200, range: 150, connectionRadius: 400, size: 'small', color: '#00ffff', stat: 'env', effect: 5, desc: '+Env' },
+            { id: 'park', name: 'Park', iconKey: 'park', cost: 450, range: 300, connectionRadius: 600, size: 'large', color: '#00ffff', stat: 'env', effect: 12, desc: '++Env' },
+            { id: 'office', name: 'Office', iconKey: 'office', cost: 250, range: 150, connectionRadius: 400, size: 'small', color: '#ffaa00', stat: 'eco', effect: 5, desc: '+Eco' },
+            { id: 'factory', name: 'Factory', iconKey: 'factory', cost: 500, range: 300, connectionRadius: 600, size: 'large', color: '#ffaa00', stat: 'eco', effect: 15, desc: '++Eco / Pollutes' },
+            { id: 'clinic', name: 'Clinic', iconKey: 'clinic', cost: 250, range: 150, connectionRadius: 400, size: 'small', color: '#0080ff', stat: 'saf', effect: 5, desc: '+Saf' },
+            { id: 'hospital', name: 'Hospital', iconKey: 'hospital', cost: 480, range: 300, connectionRadius: 600, size: 'large', color: '#0080ff', stat: 'saf', effect: 12, desc: '++Saf' },
+            { id: 'library', name: 'Library', iconKey: 'library', cost: 250, range: 150, connectionRadius: 400, size: 'small', color: '#ff00ff', stat: 'cul', effect: 5, desc: '+Cul' },
+            { id: 'museum', name: 'Museum', iconKey: 'museum', cost: 400, range: 300, connectionRadius: 600, size: 'large', color: '#ff00ff', stat: 'cul', effect: 12, desc: '++Cul' }
+        ];
+
+        // === TIP SYSTEM ===
+        const TipSystem = {
+            tipQueue: [],
+            isShowingTip: false,
+            tipInterval: null,
+            placementCount: 0,
+            gameStartTime: 0,
+            lastTipTime: 0,
+            shownTipIds: new Set(),
+            previousScores: null,
+            tipHideTimeout: null,
+            hubTipQueue: [],
+            isShowingHubTip: false,
+            hubTipSpacing: 2200,
+            hubTipDelayHandle: null,
+            inactivityInterval: null,
+            inactivityThreshold: 25000,
+            lastInteractionTime: 0,
+            lastInactivityTipTime: 0,
+            lastHubNudgeTime: {},
+            lastBudgetTipTime: 0,
+            
+            welcomeDelay: 1500,
+            firstPlacementDelay: 5000,
+            tipSpacing: 8000,
+            tipDisplayDuration: 4000,
+            
+            metricNames: {
+                env: 'Environment',
+                eco: 'Economy', 
+                saf: 'Safety',
+                cul: 'Culture',
+                acc: 'Access'
+            },
+
+            init(gameApp) {
+                this.tipQueue = [];
+                this.isShowingTip = false;
+                this.placementCount = 0;
+                this.gameStartTime = Date.now();
+                this.lastTipTime = 0;
+                this.lastBudgetTipTime = 0;
+                this.shownTipIds = new Set();
+                this.previousScores = { ...gameApp.scores };
+                this.tipHideTimeout = null;
+                this.hubTipQueue = [];
+                this.isShowingHubTip = false;
+                this.lastHubNudgeTime = {};
+                this.lastInteractionTime = Date.now();
+                this.lastInactivityTipTime = 0;
+                
+                if (this.tipInterval) clearInterval(this.tipInterval);
+                if (this.inactivityInterval) clearInterval(this.inactivityInterval);
+                
+                setTimeout(() => {
+                    if (gameApp.state === 'playing') {
+                        this.showGlobalAlert({
+                            msg: `Welcome, City Planner! ${gameApp.map.neighborhoods.length} population hubs detected. Drag buildings from the palette to begin.`,
+                            type: 'info'
+                        });
+                    }
+                }, this.welcomeDelay);
+                
+                this.inactivityInterval = setInterval(() => this.checkInactivity(gameApp), 3000);
+                this.tipInterval = setInterval(() => this.processTipQueue(gameApp), 2000);
+            },
+
+            queueTip(tip) {
+                const tipId = tip.msg.substring(0, 50);
+                if (this.shownTipIds.has(tipId)) return;
+                const isDuplicate = this.tipQueue.some(t => t.msg === tip.msg);
+                if (isDuplicate) return;
+                this.tipQueue.push(tip);
+            },
+
+            processTipQueue(gameApp) {
+                if (gameApp.state !== 'playing') return;
+                if (this.isShowingTip) return;
+                if (this.tipQueue.length === 0) return;
+                
+                const now = Date.now();
+                const timeSinceLastTip = now - this.lastTipTime;
+                if (timeSinceLastTip < this.tipSpacing) return;
+                
+                if (this.placementCount === 1 && (now - this.gameStartTime) < this.firstPlacementDelay + 3000) {
+                    return;
+                }
+                
+                const tip = this.tipQueue.shift();
+                if (tip) {
+                    this.showGlobalAlert(tip);
+                    this.shownTipIds.add(tip.msg.substring(0, 50));
+                    this.lastTipTime = now;
+                }
+            },
+
+            onPlacement(placement, buildingId, gameApp) {
+                this.placementCount++;
+                const b = BUILDINGS.find(x => x.id === buildingId);
+                
+                if (this.placementCount === 1) {
+                    setTimeout(() => {
+                        const changes = this.getStatsChange(gameApp.scores);
+                        if (changes) {
+                            this.showGlobalAlert({
+                                msg: `First placement complete! ${changes}`,
+                                type: 'success'
+                            });
+                        }
+                        this.previousScores = { ...gameApp.scores };
+                    }, 700);
+                    return;
+                }
+                
+                setTimeout(() => {
+                    const changes = this.getStatsChange(gameApp.scores);
+                    if (changes && this.placementCount <= 3) {
+                        this.showGlobalAlert({
+                            msg: changes,
+                            type: 'info'
+                        }, 3000);
+                    }
+                    this.previousScores = { ...gameApp.scores };
+                    this.evaluateAndQueueTips(placement, buildingId, gameApp);
+                    this.checkBudgetAfterPlacement(gameApp);
+                }, 700);
+            },
+            
+            checkBudgetAfterPlacement(gameApp) {
+                const cheapestBuilding = Math.min(...BUILDINGS.map(b => b.cost));
+                if (gameApp.budget < cheapestBuilding) {
+                    setTimeout(() => {
+                        this.showGlobalAlert({
+                            msg: "Budget depleted! Right-click buildings to demolish for a full refund. Try different combinations for better balance.",
+                            type: 'info'
+                        }, 6000);
+                    }, 1500);
+                }
+            },
+            
+            showBudgetTip(gameApp) {
+                const now = Date.now();
+                if (this.lastBudgetTipTime && now - this.lastBudgetTipTime < 15000) return;
+                this.lastBudgetTipTime = now;
+                
+                const buildingsPlaced = gameApp.placements.length;
+                if (buildingsPlaced > 0) {
+                    setTimeout(() => {
+                        this.showGlobalAlert({
+                            msg: "Out of funds? Right-click any building to demolish it for a full refund. Experiment with different combinations!",
+                            type: 'info'
+                        }, 5000);
+                    }, 800);
+                }
+            },
+
+            getStatsChange(newScores) {
+                if (!this.previousScores) return null;
+                const changes = [];
+                const metrics = ['env', 'eco', 'saf', 'cul', 'acc'];
+                for (const m of metrics) {
+                    const diff = Math.round(newScores[m]) - Math.round(this.previousScores[m]);
+                    if (diff !== 0) {
+                        const sign = diff > 0 ? '+' : '';
+                        changes.push(`${this.metricNames[m]} ${sign}${diff}`);
+                    }
+                }
+                return changes.length > 0 ? changes.join(' • ') : null;
+            },
+
+            getHubNudge(hub) {
+                const stats = hub.stats;
+                
+                if (stats.saf < 20) {
+                    return { type: 'negative', header: 'EMERGENCY', msg: `${hub.name}: Needs a Hospital or Clinic.` };
+                }
+                if (stats.env < 20) {
+                    return { type: 'negative', header: 'POLLUTION', msg: `${hub.name}: Deploy Parks nearby.` };
+                }
+                if (stats.acc < 20) {
+                    return { type: 'negative', header: 'COVERAGE GAP', msg: `${hub.name}: Services too far away.` };
+                }
+                
+                // Positive feedback
+                for (const [key, value] of Object.entries(stats)) {
+                    if (value > 75 && key !== 'acc') {
+                        return { type: 'positive', header: 'THRIVING', msg: `${hub.name}: Excellent ${this.metricNames[key]}!` };
+                    }
+                }
+                
+                return null;
+            },
+
+            queueHubNudge(nudge, hub, gameApp) {
+                if (!nudge || !hub || !gameApp) return;
+                if (!this.hubTipQueue) this.hubTipQueue = [];
+                this.hubTipQueue.push({ nudge, hub, gameApp });
+                this.processHubNudges();
+            },
+            
+            processHubNudges() {
+                if (this.isShowingHubTip) return;
+                if (!this.hubTipQueue || this.hubTipQueue.length === 0) return;
+                
+                const next = this.hubTipQueue.shift();
+                if (!next) return;
+                
+                this.isShowingHubTip = true;
+                this.showHubNudge(next.nudge, next.hub, next.gameApp, () => {
+                    this.hubTipDelayHandle = setTimeout(() => {
+                        this.isShowingHubTip = false;
+                        this.processHubNudges();
+                    }, this.hubTipSpacing);
+                });
+            },
+
+            showHubNudge(nudge, hub, gameApp, onComplete = null) {
+                if (!nudge || !hub) {
+                    if (typeof onComplete === 'function') onComplete();
+                    return;
+                }
+                
+                const now = Date.now();
+                if (!this.lastHubNudgeTime) this.lastHubNudgeTime = {};
+                if (this.lastHubNudgeTime[hub.name] && now - this.lastHubNudgeTime[hub.name] < 7000) {
+                    if (typeof onComplete === 'function') onComplete();
+                    return;
+                }
+                
+                const container = document.getElementById('hub-nudges-container');
+                if (!container) {
+                    if (typeof onComplete === 'function') onComplete();
+                    return;
+                }
+                
+                // Convert canvas coordinates to viewport coordinates
+                // Container is position: fixed; inset: 0, so it's at viewport (0, 0)
+                const canvasRect = gameApp.canvas.getBoundingClientRect();
+                // Account for canvas scaling (internal size vs display size)
+                const scaleX = canvasRect.width / gameApp.canvas.width;
+                const scaleY = canvasRect.height / gameApp.canvas.height;
+                const screenX = canvasRect.left + (hub.x * scaleX);
+                const screenY = canvasRect.top + (hub.y * scaleY);
+                
+                const el = document.createElement('div');
+                const nudgeType = nudge.type || 'info';
+                el.className = `hub-nudge ${nudgeType}`;
+                el.innerHTML = `
+                    <div class="hub-nudge-body">
+                        <div class="hub-nudge-header">${nudge.header}</div>
+                        <div class="hub-nudge-text">${nudge.msg}</div>
+                    </div>
+                    <div class="hub-nudge-tail"></div>
+                `;
+                container.appendChild(el);
+
+                const bodyEl = el.querySelector('.hub-nudge-body');
+                const bodyRect = bodyEl ? bodyEl.getBoundingClientRect() : { width: 240, height: 80 };
+                const bodyWidth = bodyRect.width;
+                const bodyHeight = bodyRect.height;
+                const containerWidth = container.clientWidth;
+                const containerHeight = container.clientHeight;
+                
+                let bubbleLeft = screenX - bodyWidth / 2;
+                const sideMargin = 24;
+                if (bubbleLeft < sideMargin) bubbleLeft = sideMargin;
+                if (bubbleLeft + bodyWidth > containerWidth - sideMargin) {
+                    bubbleLeft = containerWidth - sideMargin - bodyWidth;
+                }
+                
+                let bubbleTop = screenY - (bodyHeight + 80);
+                let placementClass = 'above';
+                if (bubbleTop < sideMargin) {
+                    bubbleTop = screenY + 60;
+                    placementClass = 'below';
+                }
+                
+                if (placementClass === 'below' && bubbleTop + bodyHeight > containerHeight - sideMargin) {
+                    bubbleTop = Math.max(screenY + 40, containerHeight - bodyHeight - sideMargin);
+                } else if (placementClass === 'above' && bubbleTop < sideMargin) {
+                    bubbleTop = sideMargin;
+                }
+                
+                el.style.left = `${bubbleLeft}px`;
+                el.style.top = `${bubbleTop}px`;
+                if (placementClass === 'below') el.classList.add('below'); else el.classList.remove('below');
+                
+                let tailLength;
+                if (placementClass === 'below') {
+                    tailLength = Math.max(24, bubbleTop - screenY);
+                } else {
+                    tailLength = Math.max(24, screenY - (bubbleTop + bodyHeight));
+                }
+                el.style.setProperty('--hub-tail', `${tailLength}px`);
+                
+                requestAnimationFrame(() => {
+                    el.classList.add('visible');
+                });
+                
+                this.lastHubNudgeTime[hub.name] = now;
+                
+                setTimeout(() => {
+                    el.classList.remove('visible');
+                    setTimeout(() => el.remove(), 300);
+                    if (typeof onComplete === 'function') onComplete();
+                }, 4000);
+            },
+
+            evaluateAndQueueTips(placement, buildingId, gameApp) {
+                const scores = gameApp.scores;
+                const neighborhoods = gameApp.map.neighborhoods;
+                
+                if (placement && placement.efficiency !== undefined && placement.efficiency < 0.5) {
+                    this.queueTip({
+                        msg: "Tip: Buildings work best near roads. Try repositioning for better efficiency.",
+                        type: 'warning'
+                    });
+                }
+                
+                if (buildingId === 'factory') {
+                    const pinX = placement.x;
+                    const pinY = placement.y;
+                    for (const hub of neighborhoods) {
+                        const dist = Math.hypot(pinX - hub.x, pinY - hub.y);
+                        if (dist < 200) {
+                            this.queueTip({
+                                msg: `Factory pollution may affect ${hub.name}. Consider placing factories at city edges.`,
+                                type: 'warning'
+                            });
+                            break;
+                        }
+                    }
+                }
+                
+                const qol = Math.round((scores.env + scores.eco + scores.saf + scores.cul + scores.acc) / 5);
+                const metrics = ['saf', 'env', 'cul', 'eco'];
+                const lowestMetric = metrics.reduce((min, m) => scores[m] < scores[min] ? m : min, metrics[0]);
+                
+                if (scores[lowestMetric] < 25) {
+                    const tips = {
+                        saf: "Safety is low. Clinics and Hospitals help protect your citizens.",
+                        env: "Environment needs attention. Parks and Gardens improve air quality.",
+                        cul: "Culture is lacking. Libraries and Museums boost citizen engagement.",
+                        eco: "Economy is struggling. Offices and Factories create jobs."
+                    };
+                    this.queueTip({ msg: tips[lowestMetric], type: 'warning' });
+                }
+                
+                const underservedHub = neighborhoods.find(h => !h.serviced);
+                if (underservedHub && this.placementCount > 3) {
+                    this.queueTip({
+                        msg: `${underservedHub.name} needs more coverage. Place buildings within range of this hub.`,
+                        type: 'info'
+                    });
+                }
+            },
+
+            generateEndGameTips(gameApp) {
+                const tips = [];
+                const scores = gameApp.scores;
+                const placements = gameApp.placements;
+                const neighborhoods = gameApp.map.neighborhoods;
+                const budget = gameApp.budget;
+                const startBudget = gameApp.settings.budget;
+                
+                const qol = Math.round((scores.env + scores.eco + scores.saf + scores.cul + scores.acc) / 5);
+                const scoreValues = [scores.env, scores.eco, scores.saf, scores.cul, scores.acc];
+                const maxScore = Math.max(...scoreValues);
+                const minScore = Math.min(...scoreValues);
+                const scoreSpread = maxScore - minScore;
+                
+                const factoryCount = placements.filter(p => p.typeId === 'factory').length;
+                const smallBuildings = placements.filter(p => {
+                    const b = BUILDINGS.find(x => x.id === p.typeId);
+                    return b && b.size === 'small';
+                }).length;
+                const largeBuildings = placements.filter(p => {
+                    const b = BUILDINGS.find(x => x.id === p.typeId);
+                    return b && b.size === 'large';
+                }).length;
+                
+                const avgEfficiency = placements.length > 0 
+                    ? placements.reduce((sum, p) => sum + (p.efficiency || 0), 0) / placements.length 
+                    : 0;
+                
+                const lowEfficiencyCount = placements.filter(p => p.efficiency !== undefined && p.efficiency < 0.5).length;
+                const unservedHubs = neighborhoods.filter(h => !h.serviced);
+                
+                if (scores.eco > 60 && scores.env < 35) {
+                    tips.push({
+                        category: 'Balance',
+                        icon: 'balance',
+                        text: "Strong economy, but at what cost? Factories boosted jobs but degraded air quality. Balance industrial growth with Parks and Gardens.",
+                        priority: 1
+                    });
+                }
+                
+                if (scoreSpread > 40) {
+                    tips.push({
+                        category: 'Balance',
+                        icon: 'balance',
+                        text: "Unbalanced development detected. Your lowest metric dragged down overall QoL. Aim for even coverage across all categories.",
+                        priority: 2
+                    });
+                }
+                
+                if (avgEfficiency < 0.6) {
+                    tips.push({
+                        category: 'Placement',
+                        icon: 'placement',
+                        text: "Many buildings operated below capacity. Prioritize road connections for maximum impact.",
+                        priority: 1
+                    });
+                }
+                
+                if (unservedHubs.length > 0) {
+                    tips.push({
+                        category: 'Placement',
+                        icon: 'placement',
+                        text: `${unservedHubs[0].name} remained underserved. Every hub needs adequate building coverage to maximize city QoL.`,
+                        priority: 2
+                    });
+                }
+                
+                const budgetRemaining = budget / startBudget;
+                if (budgetRemaining > 0.4 && qol < 60) {
+                    tips.push({
+                        category: 'Budget',
+                        icon: 'budget',
+                        text: `Unspent resources! You finished with ₸${budget} remaining. Deploying more buildings could have improved your score.`,
+                        priority: 1
+                    });
+                }
+                
+                if (lowEfficiencyCount > 3) {
+                    tips.push({
+                        category: 'Budget',
+                        icon: 'budget',
+                        text: "Multiple low-efficiency placements detected. Always check road connectivity before finalizing placement.",
+                        priority: 1
+                    });
+                }
+                
+                if (qol > 80) {
+                    tips.push({
+                        category: 'Strategic',
+                        icon: 'strategic',
+                        text: "Outstanding urban planning! Your city achieved exceptional quality of life across all metrics.",
+                        priority: 3
+                    });
+                }
+                
+                return tips.slice(0, 3);
+            },
+
+            showGlobalAlert(alert, duration = null) {
+                if (!alert) return;
+                const bar = document.getElementById('tip-status-bar');
+                const textEl = document.getElementById('tip-status-text');
+                const iconEl = document.getElementById('tip-status-icon');
+                if (!bar || !textEl || !iconEl) return;
+                
+                this.isShowingTip = true;
+                const displayTime = duration || this.tipDisplayDuration;
+                
+                bar.classList.remove('visible', 'warning', 'info', 'success', 'critical');
+                const type = alert.type || 'info';
+                const iconMap = {
+                    critical: '!',
+                    warning: '⚠',
+                    info: 'ℹ',
+                    success: '✓'
+                };
+                const iconChar = iconMap[type] || '•';
+                
+                bar.classList.add('visible', type);
+                iconEl.innerText = iconChar;
+                textEl.innerText = alert.msg || '';
+                
+                if (this.tipHideTimeout) clearTimeout(this.tipHideTimeout);
+                this.tipHideTimeout = setTimeout(() => {
+                    bar.classList.remove('visible', 'warning', 'info', 'success', 'critical');
+                    this.isShowingTip = false;
+                    this.tipHideTimeout = null;
+                }, displayTime);
+            },
+            
+            registerInteraction() {
+                this.lastInteractionTime = Date.now();
+            },
+            
+            checkInactivity(gameApp) {
+                if (!gameApp || gameApp.state !== 'playing') return;
+                const now = Date.now();
+                if (now - this.lastInteractionTime < this.inactivityThreshold) return;
+                if (now - this.lastInactivityTipTime < this.inactivityThreshold) return;
+                
+                this.lastInactivityTipTime = now;
+                this.showGlobalAlert({
+                    msg: "City sensors idle. Drag a building or pan to continue planning.",
+                    type: 'warning'
+                }, 4500);
+                this.lastInteractionTime = Date.now();
+            },
+
+            renderEndGameTips(tips) {
+                const container = document.getElementById('result-tips');
+                if (!container) return;
+                container.innerHTML = '';
+                
+                tips.forEach(tip => {
+                    const el = document.createElement('div');
+                    el.className = 'result-tip';
+                    el.innerHTML = `
+                        <div class="tip-icon ${tip.icon}">${tip.icon === 'balance' ? '⚖' : tip.icon === 'placement' ? '📍' : tip.icon === 'budget' ? '₸' : '🎯'}</div>
+                        <div class="tip-content">
+                            <div class="tip-category">${tip.category}</div>
+                            <div class="tip-text">${tip.text}</div>
+                        </div>
+                    `;
+                    container.appendChild(el);
+                });
+            },
+
+            clearAll() {
+                if (this.tipInterval) {
+                    clearInterval(this.tipInterval);
+                    this.tipInterval = null;
+                }
+                if (this.tipHideTimeout) {
+                    clearTimeout(this.tipHideTimeout);
+                    this.tipHideTimeout = null;
+                }
+                if (this.inactivityInterval) {
+                    clearInterval(this.inactivityInterval);
+                    this.inactivityInterval = null;
+                }
+                this.tipQueue = [];
+                this.isShowingTip = false;
+                const bar = document.getElementById('tip-status-bar');
+                if (bar) bar.classList.remove('visible', 'warning', 'info', 'success', 'critical');
+                const icon = document.getElementById('tip-status-icon');
+                if (icon) icon.innerText = 'ℹ';
+                const text = document.getElementById('tip-status-text');
+                if (text) text.innerText = '';
+                const hubContainer = document.getElementById('hub-nudges-container');
+                if (hubContainer) hubContainer.innerHTML = '';
+                this.hubTipQueue = [];
+                this.isShowingHubTip = false;
+                if (this.hubTipDelayHandle) {
+                    clearTimeout(this.hubTipDelayHandle);
+                    this.hubTipDelayHandle = null;
+                }
+                this.lastHubNudgeTime = {};
+                this.lastInteractionTime = Date.now();
+                this.lastInactivityTipTime = 0;
+            }
+        };
+
+        const gameApp = {
+            state: 'menu',
+            settings: { budget: 3500 },
+            budget: 3500,
+            time: 180,
+            scores: { qol: 50, env: 50, eco: 50, saf: 50, cul: 50, acc: 0 },
+            map: { nodes: [], lines: [], neighborhoods: [] },
+            placements: [],
+            canvas: null, ctx: null, width: 0, height: 0,
+            draggingId: null, mouseX: 0, mouseY: 0, animTime: 0,
+            isValidPlacement: true,
+            iconPaths: {}, 
+            lastPreviewTime: 0,
+            previewThrottle: 50,
+            lastPreviewTime: 0,
+            previewThrottle: 50, // ms between preview updates 
+
+            init() {
+                this.canvas = document.getElementById('canvas');
+                this.ctx = this.canvas.getContext('2d');
+                
+                Object.keys(ICONS).forEach(k => {
+                    this.iconPaths[k] = new Path2D(ICONS[k]);
+                });
+
+                window.addEventListener('resize', () => this.resize());
+                
+                ['mousedown', 'touchstart'].forEach(e => this.canvas.addEventListener(e, ev => { TipSystem.registerInteraction(); this.handlePress(ev); }, {passive:false}));
+                ['mousemove', 'touchmove'].forEach(e => window.addEventListener(e, ev => { TipSystem.registerInteraction(); this.handleMove(ev); }, {passive:false}));
+                ['mouseup', 'touchend'].forEach(e => window.addEventListener(e, ev => { TipSystem.registerInteraction(); this.handleRelease(ev); }, {passive:false}));
+
+                this.renderPalette();
+                this.renderMetricsBar();
+                
+                document.getElementById('set-budget').value = this.settings.budget;
+            },
+
+            applySettings() {
+                this.settings.budget = parseInt(document.getElementById('set-budget').value);
+                document.getElementById('settings-modal').style.display = 'none';
+                if (this.state === 'playing') {
+                    this.regenerateLevel();
+                }
+            },
+
+            resize() {
+                const container = document.getElementById('game-container');
+                if(!container) return;
+                this.width = container.clientWidth;
+                this.height = container.clientHeight;
+                this.canvas.width = this.width;
+                this.canvas.height = this.height;
+                if(this.state === 'playing') this.generateMap(); 
+            },
+
+            startGame() {
+                document.getElementById('start-screen').classList.add('hidden');
+                document.getElementById('game-container').classList.add('active');
+                this.state = 'playing';
+                this.budget = this.settings.budget;
+                this.time = 180;
+                this.placements = [];
+                this.generateMap(); // Explicitly generate map
+                this.resize(); 
+                TipSystem.init(this);
+                this.startGameLoop();
+                this.updateUI();
+            },
+
+            showStartScreen() {
+                this.state = 'menu';
+                document.getElementById('start-screen').classList.remove('hidden');
+                document.getElementById('result-overlay').classList.remove('active');
+            },
+
+            regenerateLevel() {
+                this.budget = this.settings.budget;
+                this.placements = [];
+                this.generateMap();
+                this.updateUI();
+                this.showToast("System Reset", "good");
+            },
+
+            startGameLoop() {
+                if(this.timerId) clearInterval(this.timerId);
+                this.timerId = setInterval(() => {
+                    this.time--;
+                    if(this.time <= 0) this.endGame();
+                    this.updateUI();
+                }, 1000);
+                this.loop();
+            },
+
+            endGame() {
+                clearInterval(this.timerId);
+                this.state = 'ended';
+                TipSystem.clearAll();
+                document.getElementById('result-overlay').classList.add('active');
+                document.getElementById('res-score').innerText = this.scores.qol;
+                let msg = "Systems Nominal.";
+                if(this.scores.qol > 80) msg = "Optimization Excellent. City Thriving.";
+                else if(this.scores.qol < 40) msg = "Critical System Failure. Re-balancing Required.";
+                document.getElementById('res-msg').innerText = msg;
+                const tips = TipSystem.generateEndGameTips(this);
+                TipSystem.renderEndGameTips(tips);
+            },
+
+            // --- MAP GENERATION ---
+            generateMap() {
+                const w = this.width, h = this.height;
+                const nodes = [];
+                const lines = [];
+                const neighborhoods = [];
+                const obstacles = [];
+
+                // Generate obstacles using Perlin-like noise for organic patterns
+                const sx = Math.random() * 1000;
+                const sy = Math.random() * 1000;
+                
+                // Multi-octave noise for more natural patterns
+                const noise1Freq = 0.1 + (Math.random() * 0.15); // Low frequency (large features)
+                const noise2Freq = 0.3 + (Math.random() * 0.4); // Medium frequency (details)
+                const noise3Freq = 0.7 + (Math.random() * 0.5);  // High frequency (fine details)
+                
+                // Lower threshold to generate more obstacles (0.4-0.6 range)
+                const threshold = 0.4 + (Math.random() * 0.2);
+                
+                // Use finer grid for smoother, more organic patterns
+                const gridSize = 25; // Balanced grid size
+                const cols = Math.ceil(w / gridSize);
+                const rows = Math.ceil(h / gridSize);
+                
+                // Generate noise map
+                const noiseMap = [];
+                for(let r = 0; r < rows; r++) {
+                    noiseMap[r] = [];
+                    for(let c = 0; c < cols; c++) {
+                        const nx = (c + sx) * noise1Freq;
+                        const ny = (r + sy) * noise1Freq;
+                        
+                        // Multi-octave noise (simulating Perlin noise)
+                        let noise = Math.sin(nx) * Math.cos(ny) * 0.4; // Base layer
+                        
+                        // Add medium frequency detail
+                        const nx2 = (c + sx) * noise2Freq;
+                        const ny2 = (r + sy) * noise2Freq;
+                        noise += Math.sin(nx2) * Math.cos(ny2) * 0.35;
+                        
+                        // Add high frequency detail
+                        const nx3 = (c + sx) * noise3Freq;
+                        const ny3 = (r + sy) * noise3Freq;
+                        noise += Math.sin(nx3) * Math.cos(ny3) * 0.25;
+                        
+                        // Normalize to -1 to 1 range
+                        noise = Math.max(-1, Math.min(1, noise));
+                        noiseMap[r][c] = noise;
+                    }
+                }
+                
+                // Generate obstacles from noise map
+                for(let r = 0; r < rows; r++) {
+                    for(let c = 0; c < cols; c++) {
+                        const x = c * gridSize + gridSize / 2;
+                        const y = r * gridSize + gridSize / 2;
+                        
+                        if(x < w * 0.05 || x > w * 0.95 || y < h * 0.05 || y > h * 0.95) continue;
+                        
+                        const noise = noiseMap[r][c];
+                        
+                        // Check neighboring cells for clustering (creates larger, more organic regions)
+                        let neighborCount = 0;
+                        let neighborSum = noise;
+                        for(let dr = -1; dr <= 1; dr++) {
+                            for(let dc = -1; dc <= 1; dc++) {
+                                if(dr === 0 && dc === 0) continue;
+                                const nr = r + dr;
+                                const nc = c + dc;
+                                if(nr >= 0 && nr < rows && nc >= 0 && nc < cols) {
+                                    neighborSum += noiseMap[nr][nc];
+                                    neighborCount++;
+                                }
+                            }
+                        }
+                        const avgNoise = neighborSum / (neighborCount + 1);
+                        
+                        let type = null;
+                        if (avgNoise > threshold) type = 'water';
+                        else if (avgNoise < -threshold) type = 'mountain';
+                        
+                        if(type) {
+                            // Vary radius based on noise strength for more organic shapes
+                            const noiseStrength = Math.abs(avgNoise);
+                            const baseRadius = gridSize * 0.8;
+                            const radiusVariation = gridSize * 0.4;
+                            const radius = baseRadius + (noiseStrength * radiusVariation);
+                            
+                            obstacles.push({
+                                x, y,
+                                type,
+                                radius: Math.max(gridSize * 0.5, Math.min(gridSize * 1.5, radius))
+                            });
+                        }
+                    }
+                }
+                
+                // Merge very close obstacles of the same type (less aggressive merging)
+                const mergedObstacles = [];
+                const processed = new Set();
+                
+                for(let i = 0; i < obstacles.length; i++) {
+                    if(processed.has(i)) continue;
+                    
+                    const current = obstacles[i];
+                    const cluster = [current];
+                    processed.add(i);
+                    
+                    // Find very nearby obstacles of the same type (only merge if overlapping significantly)
+                    for(let j = i + 1; j < obstacles.length; j++) {
+                        if(processed.has(j)) continue;
+                        const other = obstacles[j];
+                        const dist = Math.hypot(current.x - other.x, current.y - other.y);
+                        
+                        // Only merge if they're very close (overlapping by at least 50%)
+                        if(other.type === current.type && dist < (current.radius + other.radius) * 0.5) {
+                            cluster.push(other);
+                            processed.add(j);
+                        }
+                    }
+                    
+                    // Merge cluster into single obstacle
+                    if(cluster.length === 1) {
+                        mergedObstacles.push(current);
+                    } else {
+                        // Calculate weighted center and combined radius
+                        let totalX = 0, totalY = 0, maxRadius = 0;
+                        cluster.forEach(obs => {
+                            totalX += obs.x;
+                            totalY += obs.y;
+                            maxRadius = Math.max(maxRadius, obs.radius);
+                        });
+                        
+                        mergedObstacles.push({
+                            x: totalX / cluster.length,
+                            y: totalY / cluster.length,
+                            type: current.type,
+                            radius: maxRadius * 1.2 // Use max radius with slight increase
+                        });
+                    }
+                }
+                
+                obstacles.length = 0;
+                obstacles.push(...mergedObstacles);
+
+                const seedCount = Math.floor(3 + Math.random() * 6);
+                let attempts = 0;
+                while(nodes.length < seedCount && attempts < 100) {
+                    attempts++;
+                    const x = w * 0.1 + Math.random() * (w * 0.8);
+                    const y = h * 0.1 + Math.random() * (h * 0.8);
+                    
+                    // Don't place nodes on obstacles
+                    let onObstacle = false;
+                    for(let obs of obstacles) {
+                        if(Math.hypot(obs.x - x, obs.y - y) < obs.radius + 80) {
+                            onObstacle = true;
+                            break;
+                        }
+                    }
+                    if(onObstacle) continue;
+                    
+                    let ok = true;
+                    for(let n of nodes) { if(Math.hypot(n.x-x, n.y-y) < 220) ok=false; }
+                    if(ok) nodes.push({x, y});
+                }
+
+                const names = ["Sector 1", "District 9", "Core", "Uptown", "Port", "Nexus", "Alpha", "Omega"];
+                nodes.forEach((n, i) => {
+                    const pop = Math.floor(20000 + Math.random() * 230000);
+                    neighborhoods.push({
+                        name: names[i] || "Zone "+i,
+                        x: n.x, y: n.y,
+                        pop: pop, 
+                        stats: { env: 15, eco: 15, saf: 15, cul: 15, acc: 0 } 
+                    });
+                });
+
+                for(let i=0; i<nodes.length; i++) {
+                    let dists = nodes.map((n, idx) => ({idx, d: Math.hypot(n.x-nodes[i].x, n.y-nodes[i].y)}));
+                    dists.sort((a,b) => a.d - b.d);
+                    for(let k=1; k<Math.min(4, dists.length); k++) {
+                        const targetIdx = dists[k].idx;
+                        if(targetIdx > i) {
+                            const n1 = nodes[i];
+                            const n2 = nodes[targetIdx];
+                            
+                            // Check if direct path hits obstacles - if so, create waypoint path
+                            // Use local obstacles array since map isn't set yet
+                            let hitsObstacle = false;
+                            if(obstacles && obstacles.length > 0) {
+                                for(let obs of obstacles) {
+                                    const dist = this.distToSegment(obs.x, obs.y, n1.x, n1.y, n2.x, n2.y);
+                                    if(dist < obs.radius + 10) {
+                                        hitsObstacle = true;
+                                        break;
+                                    }
+                                }
+                            }
+                            
+                            if(hitsObstacle) {
+                                // Store waypoint path for this connection
+                                const waypoints = this.findPathAroundObstaclesWithList(n1.x, n1.y, n2.x, n2.y, obstacles);
+                                if(waypoints && waypoints.length > 2) {
+                                    lines.push({
+                                        from: i,
+                                        to: targetIdx,
+                                        waypoints: waypoints.slice(1, -1) // Exclude start and end points
+                                    });
+                                } else {
+                                    // If pathfinding fails, skip this connection
+                                    // lines.push([i, targetIdx]); // Skip instead of direct line
+                                }
+                            } else {
+                                // Direct path is clear
+                                lines.push([i, targetIdx]);
+                            }
+                        }
+                    }
+                }
+
+                // Ensure all nodes are connected
+                this.ensureAllNodesConnected(nodes, lines, obstacles);
+
+                this.map = { nodes, lines, neighborhoods, obstacles };
+                this.recalc();
+            },
+
+            // Check if all nodes are connected (graph connectivity)
+            areAllNodesConnected(nodes, lines) {
+                if(nodes.length === 0) return true;
+                if(nodes.length === 1) return true;
+                
+                // Build adjacency list
+                const adj = new Array(nodes.length).fill(0).map(() => []);
+                lines.forEach(l => {
+                    let from, to;
+                    if(Array.isArray(l)) {
+                        from = l[0];
+                        to = l[1];
+                    } else {
+                        from = l.from;
+                        to = l.to;
+                    }
+                    adj[from].push(to);
+                    adj[to].push(from);
+                });
+                
+                // BFS from first node to check if all nodes are reachable
+                const visited = new Set();
+                const queue = [0];
+                visited.add(0);
+                
+                while(queue.length > 0) {
+                    const current = queue.shift();
+                    for(const neighbor of adj[current]) {
+                        if(!visited.has(neighbor)) {
+                            visited.add(neighbor);
+                            queue.push(neighbor);
+                        }
+                    }
+                }
+                
+                return visited.size === nodes.length;
+            },
+
+            // Ensure all nodes are connected by adding additional connections if needed
+            ensureAllNodesConnected(nodes, lines, obstacles) {
+                if(nodes.length <= 1) return;
+                
+                // Check connectivity
+                if(this.areAllNodesConnected(nodes, lines)) {
+                    return; // Already connected
+                }
+                
+                // Build adjacency list to find disconnected components
+                const adj = new Array(nodes.length).fill(0).map(() => []);
+                lines.forEach(l => {
+                    let from, to;
+                    if(Array.isArray(l)) {
+                        from = l[0];
+                        to = l[1];
+                    } else {
+                        from = l.from;
+                        to = l.to;
+                    }
+                    adj[from].push(to);
+                    adj[to].push(from);
+                });
+                
+                // Find all connected components
+                const visited = new Set();
+                const components = [];
+                
+                for(let i = 0; i < nodes.length; i++) {
+                    if(visited.has(i)) continue;
+                    
+                    const component = [];
+                    const queue = [i];
+                    visited.add(i);
+                    component.push(i);
+                    
+                    while(queue.length > 0) {
+                        const current = queue.shift();
+                        for(const neighbor of adj[current]) {
+                            if(!visited.has(neighbor)) {
+                                visited.add(neighbor);
+                                component.push(neighbor);
+                                queue.push(neighbor);
+                            }
+                        }
+                    }
+                    
+                    components.push(component);
+                }
+                
+                // Connect components by finding shortest paths between them
+                for(let c = 1; c < components.length; c++) {
+                    const comp1 = components[0]; // Connect everything to first component
+                    const comp2 = components[c];
+                    
+                    // Find closest pair of nodes between components
+                    let minDist = Infinity;
+                    let bestFrom = -1;
+                    let bestTo = -1;
+                    
+                    for(const i of comp1) {
+                        for(const j of comp2) {
+                            const dist = Math.hypot(nodes[i].x - nodes[j].x, nodes[i].y - nodes[j].y);
+                            if(dist < minDist) {
+                                minDist = dist;
+                                bestFrom = i;
+                                bestTo = j;
+                            }
+                        }
+                    }
+                    
+                    // Add connection between closest nodes
+                    if(bestFrom >= 0 && bestTo >= 0) {
+                        const n1 = nodes[bestFrom];
+                        const n2 = nodes[bestTo];
+                        
+                        // Check if path hits obstacles
+                        let hitsObstacle = false;
+                        if(obstacles && obstacles.length > 0) {
+                            for(let obs of obstacles) {
+                                const dist = this.distToSegment(obs.x, obs.y, n1.x, n1.y, n2.x, n2.y);
+                                if(dist < obs.radius + 10) {
+                                    hitsObstacle = true;
+                                    break;
+                                }
+                            }
+                        }
+                        
+                        if(hitsObstacle) {
+                            // Try to find waypoint path
+                            const waypoints = this.findPathAroundObstaclesWithList(n1.x, n1.y, n2.x, n2.y, obstacles);
+                            if(waypoints && waypoints.length > 2) {
+                                lines.push({
+                                    from: bestFrom,
+                                    to: bestTo,
+                                    waypoints: waypoints.slice(1, -1)
+                                });
+                            } else {
+                                // If pathfinding fails, add direct connection anyway (will intersect obstacle but ensures connectivity)
+                                lines.push([bestFrom, bestTo]);
+                            }
+                        } else {
+                            // Direct path is clear
+                            lines.push([bestFrom, bestTo]);
+                        }
+                    }
+                }
+                
+                // Verify all nodes are now connected
+                if(!this.areAllNodesConnected(nodes, lines)) {
+                    // If still not connected, add a minimum spanning tree
+                    this.addMinimumSpanningTree(nodes, lines, obstacles);
+                }
+            },
+
+            // Add minimum spanning tree to ensure connectivity (fallback)
+            addMinimumSpanningTree(nodes, lines, obstacles) {
+                // Use Prim's algorithm to create MST
+                const inTree = new Set();
+                const distances = new Array(nodes.length).fill(Infinity);
+                const parents = new Array(nodes.length).fill(-1);
+                
+                distances[0] = 0;
+                
+                for(let i = 0; i < nodes.length; i++) {
+                    // Find node with minimum distance not in tree
+                    let minDist = Infinity;
+                    let minNode = -1;
+                    
+                    for(let j = 0; j < nodes.length; j++) {
+                        if(!inTree.has(j) && distances[j] < minDist) {
+                            minDist = distances[j];
+                            minNode = j;
+                        }
+                    }
+                    
+                    if(minNode === -1) break;
+                    inTree.add(minNode);
+                    
+                    // Add edge to tree if it has a parent
+                    if(parents[minNode] >= 0) {
+                        const from = parents[minNode];
+                        const to = minNode;
+                        
+                        // Check if this connection already exists
+                        let exists = false;
+                        for(const l of lines) {
+                            let lFrom, lTo;
+                            if(Array.isArray(l)) {
+                                lFrom = l[0];
+                                lTo = l[1];
+                            } else {
+                                lFrom = l.from;
+                                lTo = l.to;
+                            }
+                            if((lFrom === from && lTo === to) || (lFrom === to && lTo === from)) {
+                                exists = true;
+                                break;
+                            }
+                        }
+                        
+                        if(!exists) {
+                            const n1 = nodes[from];
+                            const n2 = nodes[to];
+                            
+                            // Check obstacles
+                            let hitsObstacle = false;
+                            if(obstacles && obstacles.length > 0) {
+                                for(let obs of obstacles) {
+                                    const dist = this.distToSegment(obs.x, obs.y, n1.x, n1.y, n2.x, n2.y);
+                                    if(dist < obs.radius + 10) {
+                                        hitsObstacle = true;
+                                        break;
+                                    }
+                                }
+                            }
+                            
+                            if(hitsObstacle) {
+                                const waypoints = this.findPathAroundObstaclesWithList(n1.x, n1.y, n2.x, n2.y, obstacles);
+                                if(waypoints && waypoints.length > 2) {
+                                    lines.push({
+                                        from: from,
+                                        to: to,
+                                        waypoints: waypoints.slice(1, -1)
+                                    });
+                                } else {
+                                    lines.push([from, to]);
+                                }
+                            } else {
+                                lines.push([from, to]);
+                            }
+                        }
+                    }
+                    
+                    // Update distances to neighbors
+                    for(let j = 0; j < nodes.length; j++) {
+                        if(!inTree.has(j)) {
+                            const dist = Math.hypot(nodes[minNode].x - nodes[j].x, nodes[minNode].y - nodes[j].y);
+                            if(dist < distances[j]) {
+                                distances[j] = dist;
+                                parents[j] = minNode;
+                            }
+                        }
+                    }
+                }
+            },
+
+            // --- GAMEPLAY INTERACTION ---
+            getPointer(e) {
+                const r = this.canvas.getBoundingClientRect();
+                const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+                const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+                return { x: clientX - r.left, y: clientY - r.top };
+            },
+
+            checkCollision(x, y) {
+                // Check other buildings
+                for(let p of this.placements) {
+                    if(Math.hypot(p.x - x, p.y - y) < 50) return true;
+                }
+                // Check hubs
+                for(let n of this.map.nodes) {
+                    if(Math.hypot(n.x - x, n.y - y) < 60) return true;
+                }
+                // Note: Obstacles are NOT checked here - buildings can be placed on obstacles (they'll be inactive)
+                return false;
+            },
+            
+            checkObstacle(x, y) {
+                // Check if position is on an obstacle
+                if(this.map.obstacles) {
+                    for(let obs of this.map.obstacles) {
+                        if(Math.hypot(obs.x - x, obs.y - y) < obs.radius) {
+                            return obs.type; // Return obstacle type ('water' or 'mountain')
+                        }
+                    }
+                }
+                return null;
+            },
+
+            handlePress(e) {
+                const p = this.getPointer(e);
+                for (let i = this.placements.length - 1; i >= 0; i--) {
+                    const placement = this.placements[i];
+                    if (Math.hypot(p.x - placement.x, p.y - placement.y) < 25) {
+                        const b = BUILDINGS.find(x => x.id === placement.typeId);
+                        this.budget += b.cost;
+                        this.placements.splice(i, 1);
+                        this.draggingId = b.id;
+                        
+                        const dragDiv = document.getElementById('drag-preview');
+                        const inner = document.getElementById('drag-icon-inner');
+                        inner.style.borderColor = b.color;
+                        inner.style.color = b.color;
+                        inner.innerHTML = `<svg class="icon-svg" viewBox="0 0 24 24"><path d="${ICONS[b.iconKey]}"></path></svg>`;
+                        dragDiv.style.display = 'block';
+                        
+                        const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+                        const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+                        dragDiv.style.left = clientX + 'px';
+                        dragDiv.style.top = clientY + 'px';
+
+                        this.recalc();
+                        this.updateUI();
+                        return; 
+                    }
+                }
+            },
+
+            handleMove(e) {
+                TipSystem.registerInteraction();
+                const p = this.getPointer(e);
+                this.mouseX = p.x;
+                this.mouseY = p.y;
+                if(this.draggingId) {
+                    const dragDiv = document.getElementById('drag-preview');
+                    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+                    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+                    dragDiv.style.left = clientX + 'px';
+                    dragDiv.style.top = clientY + 'px';
+
+                    this.isValidPlacement = !this.checkCollision(this.mouseX, this.mouseY);
+                    if(this.isValidPlacement) {
+                        dragDiv.style.opacity = "1";
+                        document.body.style.cursor = "grabbing";
+                        
+                        // Preview stats with temporary placement
+                        this.previewStats(this.draggingId, this.mouseX, this.mouseY);
+                    } else {
+                        dragDiv.style.opacity = "0.5";
+                        document.body.style.cursor = "not-allowed";
+                    }
+                }
+            },
+            
+            previewStats(typeId, x, y) {
+                // Temporarily add placement for preview
+                const b = BUILDINGS.find(x => x.id === typeId);
+                
+                // Check if building would be inactive (on obstacle)
+                const obstacleType = this.checkObstacle(x, y);
+                const inactive = obstacleType !== null;
+                
+                // Only check connectivity if not inactive
+                const conns = inactive ? [] : this.getConnectivity(x, y);
+                const connected = inactive ? false : (conns.length > 0);
+                
+                const tempPlacement = {
+                    typeId, x, y,
+                    connections: conns,
+                    connected,
+                    efficiency: inactive ? 0 : (connected ? 1.0 : 0.2),
+                    inactive: inactive,
+                    isPreview: true
+                };
+                
+                // Save current placements
+                const savedPlacements = [...this.placements];
+                // Add preview placement
+                this.placements.push(tempPlacement);
+                
+                // Recalculate with preview
+                this.recalc();
+                this.updateUI();
+                
+                // Restore placements
+                this.placements = savedPlacements;
+                // Recalculate without preview
+                this.recalc();
+            },
+            
+            previewStats(typeId, x, y) {
+                // Temporarily add placement for preview
+                const b = BUILDINGS.find(x => x.id === typeId);
+                const conns = this.getConnectivity(x, y);
+                const connected = conns.length > 0;
+                
+                const tempPlacement = {
+                    typeId, x, y,
+                    connections: conns,
+                    connected,
+                    efficiency: connected ? 1.0 : 0.2,
+                    isPreview: true
+                };
+                
+                // Save current placements
+                const savedPlacements = [...this.placements];
+                // Add preview placement
+                this.placements.push(tempPlacement);
+                
+                // Recalculate with preview
+                this.recalc();
+                this.updateUI();
+                
+                // Restore placements
+                this.placements = savedPlacements;
+                // Recalculate without preview
+                this.recalc();
+            },
+
+            handleRelease(e) {
+                if(this.draggingId) {
+                    const p = this.getPointer(e);
+                    if(p.x > 0 && p.x < this.width && p.y > 0 && p.y < this.height) {
+                        if(!this.checkCollision(p.x, p.y)) {
+                            // Can place - check if on obstacle (will be inactive)
+                            this.placeBuilding(this.draggingId, p.x, p.y);
+                        } else {
+                            // Collision with other buildings or hubs - cannot place
+                            this.showToast("Space Occupied", "bad");
+                            // Refund logic handled below implicitly by not deducting
+                        }
+                    } else {
+                        // Dropped outside, no deduction needed
+                    }
+                    this.draggingId = null;
+                    document.getElementById('drag-preview').style.display = 'none';
+                    document.body.style.cursor = "default";
+                }
+            },
+
+            renderPalette() {
+                const p = document.getElementById('palette');
+                p.innerHTML = '';
+                BUILDINGS.forEach(b => {
+                    const el = document.createElement('div');
+                    el.className = `building-card ${b.size}`;
+                    el.dataset.id = b.id;
+                    el.innerHTML = `
+                        <div class="bc-icon" style="color:${b.color}"><svg class="icon-svg" viewBox="0 0 24 24"><path d="${ICONS[b.iconKey]}"></path></svg></div>
+                        <div class="bc-name">${b.name}</div>
+                        <div class="bc-cost">₸${b.cost}</div>
+                        <div class="bc-color-strip" style="background:${b.color}"></div>
+                        <div class="bc-size-badge" style="color:${b.color}">${b.size === 'large' ? 'L' : 'S'}</div>
+                    `;
+                    el.onmousedown = (e) => {
+                        e.preventDefault();
+                        TipSystem.registerInteraction();
+                        if(this.budget < b.cost) {
+                            this.showToast("Insufficient Funds", "bad");
+                            TipSystem.showBudgetTip(this);
+                            return;
+                        }
+                        this.draggingId = b.id;
+                        const dragDiv = document.getElementById('drag-preview');
+                        const inner = document.getElementById('drag-icon-inner');
+                        inner.style.borderColor = b.color;
+                        inner.style.color = b.color;
+                        inner.innerHTML = `<svg class="icon-svg" viewBox="0 0 24 24"><path d="${ICONS[b.iconKey]}"></path></svg>`;
+                        dragDiv.style.display = 'block';
+                        dragDiv.style.left = e.clientX + 'px';
+                        dragDiv.style.top = e.clientY + 'px';
+                    };
+                    p.appendChild(el);
+                });
+            },
+
+            renderMetricsBar() {
+                const c = document.getElementById('metrics-bar');
+                c.innerHTML = STATS.map(s => `
+                    <div class="metric-group">
+                        <div class="metric-header">
+                            <span>${s.name}</span>
+                            <span id="txt-${s.id}" style="color:${s.color}">50</span>
+                        </div>
+                        <div class="metric-track">
+                            <div id="bar-${s.id}" class="metric-fill" style="background:${s.color}; width: 50%;"></div>
+                        </div>
+                    </div>
+                `).join('');
+            },
+
+            distToSegment(px, py, x1, y1, x2, y2) {
+                const l2 = (x1-x2)**2 + (y1-y2)**2;
+                if (l2 === 0) return Math.hypot(px-x1, py-y1);
+                let t = ((px-x1)*(x2-x1) + (py-y1)*(y2-y1)) / l2;
+                t = Math.max(0, Math.min(1, t));
+                return Math.hypot(px - (x1 + t*(x2-x1)), py - (y1 + t*(y2-y1)));
+            },
+
+            lineIntersectsObstacle(x1, y1, x2, y2) {
+                if(!this.map.obstacles) return false;
+                
+                // Check if line segment intersects any obstacle
+                for(let obs of this.map.obstacles) {
+                    // Calculate distance from obstacle center to line segment
+                    const dist = this.distToSegment(obs.x, obs.y, x1, y1, x2, y2);
+                    
+                    // If distance is less than obstacle radius, line intersects obstacle
+                    if(dist < obs.radius + 10) { // Add small buffer
+                        return true;
+                    }
+                }
+                return false;
+            },
+
+            findPathAroundObstacles(x1, y1, x2, y2) {
+                // Use map obstacles if available
+                const obstacles = this.map?.obstacles || [];
+                return this.findPathAroundObstaclesWithList(x1, y1, x2, y2, obstacles);
+            },
+
+            findPathAroundObstaclesWithList(x1, y1, x2, y2, obstacles) {
+                // Try to find a path that avoids obstacles
+                // Use a simple waypoint approach: if direct path hits obstacle, try going around
+                
+                if(!obstacles || obstacles.length === 0) {
+                    return [{x: x1, y: y1}, {x: x2, y: y2}];
+                }
+                
+                // Check if direct path hits obstacles
+                let hitsObstacle = false;
+                for(let obs of obstacles) {
+                    const dist = this.distToSegment(obs.x, obs.y, x1, y1, x2, y2);
+                    if(dist < obs.radius + 10) {
+                        hitsObstacle = true;
+                        break;
+                    }
+                }
+                
+                if(!hitsObstacle) {
+                    return [{x: x1, y: y1}, {x: x2, y: y2}];
+                }
+                
+                // Find obstacles blocking the path
+                const blockingObstacles = [];
+                for(let obs of obstacles) {
+                    const dist = this.distToSegment(obs.x, obs.y, x1, y1, x2, y2);
+                    if(dist < obs.radius + 10) {
+                        blockingObstacles.push(obs);
+                    }
+                }
+                
+                if(blockingObstacles.length === 0) {
+                    return [{x: x1, y: y1}, {x: x2, y: y2}];
+                }
+                
+                // Try to route around obstacles
+                // Find the closest obstacle to the midpoint
+                const midX = (x1 + x2) / 2;
+                const midY = (y1 + y2) / 2;
+                blockingObstacles.sort((a, b) => {
+                    const distA = Math.hypot(a.x - midX, a.y - midY);
+                    const distB = Math.hypot(b.x - midX, b.y - midY);
+                    return distA - distB;
+                });
+                
+                const mainObstacle = blockingObstacles[0];
+                
+                // Calculate perpendicular direction to go around obstacle
+                const dx = x2 - x1;
+                const dy = y2 - y1;
+                const len = Math.hypot(dx, dy);
+                if(len === 0) return [{x: x1, y: y1}, {x: x2, y: y2}];
+                
+                const perpX = -dy / len;
+                const perpY = dx / len;
+                
+                // Try going around on both sides
+                const offset = mainObstacle.radius + 30;
+                const waypoint1X = mainObstacle.x + perpX * offset;
+                const waypoint1Y = mainObstacle.y + perpY * offset;
+                const waypoint2X = mainObstacle.x - perpX * offset;
+                const waypoint2Y = mainObstacle.y - perpY * offset;
+                
+                // Check which side is better (shorter and doesn't hit other obstacles)
+                const path1 = [
+                    {x: x1, y: y1},
+                    {x: waypoint1X, y: waypoint1Y},
+                    {x: x2, y: y2}
+                ];
+                const path2 = [
+                    {x: x1, y: y1},
+                    {x: waypoint2X, y: waypoint2Y},
+                    {x: x2, y: y2}
+                ];
+                
+                // Check if paths are valid (don't hit obstacles)
+                let path1Valid = true;
+                let path2Valid = true;
+                
+                for(let i = 0; i < path1.length - 1; i++) {
+                    for(let obs of obstacles) {
+                        const dist = this.distToSegment(obs.x, obs.y, path1[i].x, path1[i].y, path1[i+1].x, path1[i+1].y);
+                        if(dist < obs.radius + 10) {
+                            path1Valid = false;
+                            break;
+                        }
+                    }
+                    if(!path1Valid) break;
+                }
+                
+                for(let i = 0; i < path2.length - 1; i++) {
+                    for(let obs of obstacles) {
+                        const dist = this.distToSegment(obs.x, obs.y, path2[i].x, path2[i].y, path2[i+1].x, path2[i+1].y);
+                        if(dist < obs.radius + 10) {
+                            path2Valid = false;
+                            break;
+                        }
+                    }
+                    if(!path2Valid) break;
+                }
+                
+                if(path1Valid) return path1;
+                if(path2Valid) return path2;
+                
+                // If both paths hit obstacles, return null to skip this connection
+                return null;
+            },
+
+            getConnectivity(x, y) {
+                const range = 200; 
+                let connections = [];
+                
+                // Only check connections to roads (lines), NOT hubs
+                this.map.lines.forEach(l => {
+                    let points = [];
+                    
+                    // Handle both simple array format and waypoint format
+                    if(Array.isArray(l)) {
+                    const n1 = this.map.nodes[l[0]];
+                    const n2 = this.map.nodes[l[1]];
+                        points = [{x: n1.x, y: n1.y}, {x: n2.x, y: n2.y}];
+                    } else {
+                        const n1 = this.map.nodes[l.from];
+                        const n2 = this.map.nodes[l.to];
+                        points = [{x: n1.x, y: n1.y}];
+                        if(l.waypoints) {
+                            points.push(...l.waypoints);
+                        }
+                        points.push({x: n2.x, y: n2.y});
+                    }
+                    
+                    // Check distance to each segment of the road
+                    for(let i = 0; i < points.length - 1; i++) {
+                        const p1 = points[i];
+                        const p2 = points[i + 1];
+                        const d = this.distToSegment(x, y, p1.x, p1.y, p2.x, p2.y);
+                    if(d < range) {
+                            const l2 = (p1.x-p2.x)**2 + (p1.y-p2.y)**2;
+                            let t = ((x-p1.x)*(p2.x-p1.x) + (y-p1.y)*(p2.y-p1.y)) / l2;
+                        t = Math.max(0, Math.min(1, t));
+                            const cx = p1.x + t*(p2.x-p1.x);
+                            const cy = p1.y + t*(p2.y-p1.y);
+                        
+                        let isDup = false;
+                        for(let c of connections) if(Math.hypot(c.x-cx, c.y-cy) < 20) isDup = true;
+                        
+                        if(!isDup) connections.push({x: cx, y: cy, type:'line', dist: d});
+                        }
+                    }
+                });
+
+                return connections;
+            },
+
+            placeBuilding(typeId, x, y) {
+                const b = BUILDINGS.find(x => x.id === typeId);
+                // NOTE: Budget check for initial drag is done in onmousedown
+                // Here we deduct because placement is final
+                this.budget -= b.cost;
+                
+                // Check if building is on an obstacle
+                const obstacleType = this.checkObstacle(x, y);
+                const inactive = obstacleType !== null;
+                
+                // Check connectivity to roads only (not hubs) - but only if not inactive
+                const conns = inactive ? [] : this.getConnectivity(x, y);
+                const connected = conns.length > 0;
+
+                const placement = {
+                    typeId, x, y,
+                    connections: conns,
+                    connected: inactive ? false : connected,
+                    efficiency: inactive ? 0 : (connected ? 1.0 : 0.2),
+                    inactive: inactive
+                };
+                this.placements.push(placement);
+
+                if(inactive) {
+                    const obstacleName = obstacleType === 'water' ? 'Water' : 'Mountain';
+                    this.showToast(`${b.name} Placed (Inactive on ${obstacleName})`, "bad");
+                } else if(connected) {
+                    this.showToast("Connected to Road", "good");
+                } else {
+                    this.showToast("Warning: Not Connected", "bad");
+                }
+
+                this.recalc();
+                this.updateUI();
+                
+                // Notify tip system
+                TipSystem.onPlacement(placement, typeId, this);
+            },
+
+            recalc() {
+                // Guard: ensure map and neighborhoods exist
+                if(!this.map || !this.map.neighborhoods || this.map.neighborhoods.length === 0) {
+                    return;
+                }
+                
+                // Reset stats to 0 (like Digital Twin 17) for immediate responsiveness
+                this.map.neighborhoods.forEach(n => {
+                    n.stats = { env: 0, eco: 0, saf: 0, cul: 0, acc: 0 }; 
+                });
+
+                // Calculate global connection bonus (like Digital Twin 17)
+                const connectedBuildingCount = this.placements.filter(p => p.connected).length;
+                const globalConnectionBonus = connectedBuildingCount === 0 ? 0 : Math.min(
+                    15,
+                    5 + Math.round(
+                        ((Math.log2 ? Math.log2(connectedBuildingCount + 1) : Math.log(connectedBuildingCount + 1) / Math.log(2))) * 5
+                    )
+                );
+
+                this.placements.forEach(p => {
+                    const b = BUILDINGS.find(x => x.id === p.typeId);
+                    if(!b) return;
+                    
+                    // Inactive buildings (on obstacles) have no effect
+                    if(p.inactive) {
+                        return; // No effect at all when inactive
+                    }
+                    
+                    // Buildings ONLY affect stats when connected to the network
+                    if(!p.connected) {
+                        return; // No effect at all when not connected
+                    }
+
+                    // NEW: Connection radius system - affects all hubs proportionally by distance (like water flow)
+                    const connectionRadius = b.connectionRadius || 500; // Default radius
+
+                    this.map.neighborhoods.forEach(n => {
+                        const dist = Math.hypot(p.x - n.x, p.y - n.y);
+                        
+                        // Only affect hubs within connection radius
+                        if(dist > connectionRadius) {
+                            return; // Beyond connection radius, no effect
+                        }
+                        
+                        // Calculate influence based on distance (inverse square falloff for smooth water-flow effect)
+                        // Influence decreases with distance - closer hubs get more effect
+                        const normalizedDist = dist / connectionRadius; // 0 to 1
+                        const influence = 1 - (normalizedDist * normalizedDist); // Inverse square falloff
+                        
+                        if(b.id === 'factory') {
+                            // Factory has special donut pattern for visual range, but connection radius affects all hubs
+                            const innerRadius = 70; 
+                            if(dist < innerRadius) {
+                                // Strong negative effects in inner radius
+                                n.stats.eco -= 4 * influence; 
+                                n.stats.env -= 4 * influence;
+                                n.stats.saf -= 3 * influence;
+                                n.stats.cul -= 3 * influence;
+                            } else if (dist < b.range) {
+                                // Positive eco in outer ring, slight env penalty
+                                const donutThickness = b.range - innerRadius;
+                                const position = dist - innerRadius;
+                                const factoryPower = (position / donutThickness) * influence;
+                                
+                                n.stats.eco += 15 * factoryPower; 
+                                n.stats.env -= 5 * factoryPower;
+                            } else {
+                                // Beyond visual range but within connection radius - still affects via connection
+                                // Factory provides eco boost even at distance, but weaker
+                                n.stats.eco += 8 * influence;
+                                n.stats.env -= 2 * influence;
+                            }
+                        } else {
+                            // Regular buildings: use effect value directly (already scaled to 5-12 range)
+                            // Apply effect to all hubs within connection radius, weighted by distance
+                            n.stats[b.stat] += b.effect * influence;
+                            if(b.stat === 'eco') n.stats.env -= (b.effect * 0.3 * influence);
+                            if(b.stat === 'env') n.stats.eco -= (b.effect * 0.3 * influence);
+                        }
+                    });
+                });
+
+                let count = this.map.neighborhoods.length || 1; // Prevent division by zero
+                let globalScores = { env: 0, eco: 0, saf: 0, cul: 0, acc: 0 };
+                
+                this.map.neighborhoods.forEach(n => {
+                    // Amplify stats with * 20 multiplier (like Digital Twin 17) - this makes small changes highly visible
+                    const amplifiedStats = {
+                        env: Math.max(0, Math.min(100, (n.stats.env || 0) * 20)),
+                        eco: Math.max(0, Math.min(100, (n.stats.eco || 0) * 20)),
+                        saf: Math.max(0, Math.min(100, (n.stats.saf || 0) * 20)),
+                        cul: Math.max(0, Math.min(100, (n.stats.cul || 0) * 20)),
+                        acc: 0 // Calculated separately
+                    };
+                    
+                    // Calculate accessibility like Digital Twin 17
+                    const zoneBuildings = this.placements.filter(p => {
+                        const dist = Math.hypot(p.x - n.x, p.y - n.y);
+                        return dist < 200; // Zone radius
+                    });
+                    const connectedNearHub = zoneBuildings.filter(p => p.connected);
+                    const proximityRatio = zoneBuildings.length > 0 
+                        ? connectedNearHub.length / zoneBuildings.length
+                        : 0;
+                    const proximityScore = Math.round(proximityRatio * 70);
+                    const serviceBlend = Math.round((amplifiedStats.env + amplifiedStats.eco + amplifiedStats.saf + amplifiedStats.cul) / 4) || 0;
+                    const serviceContribution = Math.round(serviceBlend * 0.3);
+                    const baselineBoost = globalConnectionBonus;
+                    
+                    amplifiedStats.acc = Math.min(100, proximityScore + serviceContribution + baselineBoost);
+                    
+                    // Store amplified stats
+                    n.stats = amplifiedStats;
+                    
+                    // Add to global totals
+                    Object.keys(globalScores).forEach(k => {
+                        globalScores[k] += amplifiedStats[k] || 0;
+                    });
+                    
+                    // Calculate serviced status (access > 50)
+                    n.serviced = amplifiedStats.acc > 50;
+                    
+                    // Queue hub nudges
+                    const citizenTip = TipSystem.getHubNudge ? TipSystem.getHubNudge(n) : null;
+                    if (citizenTip) {
+                        TipSystem.queueHubNudge(citizenTip, n, this);
+                    }
+                });
+
+                // Calculate average scores (like Digital Twin 17)
+                const targetEnv = count > 0 ? Math.round(globalScores.env / count) : 0;
+                const targetEco = count > 0 ? Math.round(globalScores.eco / count) : 0;
+                const targetSaf = count > 0 ? Math.round(globalScores.saf / count) : 0;
+                const targetCul = count > 0 ? Math.round(globalScores.cul / count) : 0;
+                const targetAcc = count > 0 ? Math.round(globalScores.acc / count) : 0;
+                
+                // Interpolate smoothly (0.3 = 30% towards target per frame)
+                const lerp = (current, target, factor = 0.3) => {
+                    const curr = current || 0;
+                    const targ = target || 0;
+                    return curr + (targ - curr) * factor;
+                };
+                
+                this.scores.env = Math.round(lerp(this.scores.env, targetEnv));
+                this.scores.eco = Math.round(lerp(this.scores.eco, targetEco));
+                this.scores.saf = Math.round(lerp(this.scores.saf, targetSaf));
+                this.scores.cul = Math.round(lerp(this.scores.cul, targetCul));
+                this.scores.acc = Math.round(lerp(this.scores.acc, targetAcc));
+
+                const statValues = [this.scores.env, this.scores.eco, this.scores.saf, this.scores.cul, this.scores.acc];
+                const sumStats = statValues.reduce((a, b) => (a || 0) + (b || 0), 0);
+                const qolScore = statValues.length > 0 ? Math.floor(sumStats / statValues.length) : 50;
+
+                const minStat = Math.min(...statValues.filter(v => v !== undefined && !isNaN(v)));
+                const finalQol = (minStat < 20 && !isNaN(minStat)) ? qolScore * 0.9 : qolScore;
+
+                this.scores.qol = Math.round(finalQol) || 50;
+            },
+
+            updateUI() {
+                document.getElementById('ui-timer').innerText = this.formatTime(this.time);
+                document.getElementById('ui-budget').innerText = this.budget;
+                document.getElementById('ui-qol').innerText = this.scores.qol;
+                document.getElementById('ui-acc').innerText = this.scores.acc + '%';
+
+                STATS.forEach(s => {
+                    const el = document.getElementById(`txt-${s.id}`);
+                    const bar = document.getElementById(`bar-${s.id}`);
+                    if (el) {
+                        // Smooth number transition
+                        const current = parseInt(el.innerText) || 0;
+                        const target = this.scores[s.id];
+                        if (Math.abs(current - target) > 0.5) {
+                            const lerped = Math.round(current + (target - current) * 0.3);
+                            el.innerText = lerped;
+                        } else {
+                            el.innerText = target;
+                        }
+                    }
+                    if (bar) {
+                        // Smooth bar transition with CSS
+                        bar.style.transition = 'width 0.3s ease-out';
+                        bar.style.width = this.scores[s.id] + '%';
+                    }
+                });
+
+                document.querySelectorAll('.building-card').forEach(el => {
+                    const id = el.dataset.id;
+                    const b = BUILDINGS.find(x => x.id === id);
+                    if(this.budget < b.cost) el.classList.add('disabled');
+                    else el.classList.remove('disabled');
+                });
+            },
+
+            formatTime(s) {
+                const m = Math.floor(s/60);
+                const sc = s%60;
+                return `${m.toString().padStart(2,'0')}:${sc.toString().padStart(2,'0')}`;
+            },
+
+            showToast(msg, type) {
+                const t = document.getElementById('feedback-toast');
+                const i = document.getElementById('toast-icon');
+                const m = document.getElementById('toast-msg');
+                m.innerText = msg;
+                i.innerText = type === 'good' ? '✓' : '!';
+                i.style.color = type === 'good' ? '#00ff88' : '#ff0066';
+                t.style.borderColor = type === 'good' ? '#00ff88' : '#ff0066';
+                t.classList.add('visible');
+                setTimeout(() => t.classList.remove('visible'), 2000);
+            },
+
+            // --- RENDER LOOP ---
+            loop() {
+                this.animTime += 0.01;
+                const ctx = this.ctx;
+                ctx.fillStyle = '#000000';
+                ctx.fillRect(0, 0, this.width, this.height);
+
+                this.drawObstacles();
+                this.drawConnections();
+                this.drawNodes();
+                this.drawPlacements();
+                this.drawDragPreview();
+
+                requestAnimationFrame(() => this.loop());
+            },
+
+            drawObstacles() {
+                if(!this.map.obstacles) return;
+                
+                const ctx = this.ctx;
+                
+                // Helper function to draw diamond (square rotated 45 degrees)
+                const drawDiamond = (x, y, size) => {
+                ctx.beginPath();
+                    ctx.moveTo(x, y - size); // Top
+                    ctx.lineTo(x + size, y); // Right
+                    ctx.lineTo(x, y + size); // Bottom
+                    ctx.lineTo(x - size, y); // Left
+                    ctx.closePath();
+                };
+                
+                // Draw water obstacles as diamonds
+                const waterObstacles = this.map.obstacles.filter(o => o.type === 'water');
+                if(waterObstacles.length > 0) {
+                    ctx.save();
+                    waterObstacles.forEach(obs => {
+                        const size = obs.radius;
+                        
+                        // Outer fill - reduced brightness to match background
+                        drawDiamond(obs.x, obs.y, size);
+                        ctx.fillStyle = 'rgba(0, 80, 120, 0.65)';
+                        ctx.shadowColor = 'rgba(0, 80, 120, 0.5)';
+                        ctx.shadowBlur = 15;
+                        ctx.fill();
+                        
+                        // Inner highlight - darker to match background
+                        drawDiamond(obs.x, obs.y, size * 0.7);
+                        ctx.fillStyle = 'rgba(40, 100, 140, 0.25)';
+                        ctx.fill();
+                        
+                        // Border - reduced brightness
+                        drawDiamond(obs.x, obs.y, size);
+                        ctx.strokeStyle = 'rgba(0, 120, 180, 0.7)';
+                        ctx.lineWidth = 3;
+                        ctx.stroke();
+                    });
+                    ctx.shadowBlur = 0;
+                    ctx.restore();
+                }
+                
+                // Draw mountain obstacles as diamonds
+                const mountainObstacles = this.map.obstacles.filter(o => o.type === 'mountain');
+                if(mountainObstacles.length > 0) {
+                    ctx.save();
+                    mountainObstacles.forEach(obs => {
+                        const size = obs.radius;
+                        
+                        // Outer fill - reduced brightness to match background
+                        drawDiamond(obs.x, obs.y, size);
+                        ctx.fillStyle = 'rgba(50, 55, 60, 0.55)';
+                        ctx.shadowColor = 'rgba(50, 55, 60, 0.4)';
+                        ctx.shadowBlur = 15;
+                        ctx.fill();
+                        
+                        // Inner shadow - darker to match background
+                        drawDiamond(obs.x, obs.y, size * 0.7);
+                        ctx.fillStyle = 'rgba(35, 40, 45, 0.35)';
+                        ctx.fill();
+                        
+                        // Border - reduced brightness
+                        drawDiamond(obs.x, obs.y, size);
+                        ctx.strokeStyle = 'rgba(65, 70, 75, 0.6)';
+                        ctx.lineWidth = 3;
+                        ctx.stroke();
+                    });
+                    ctx.shadowBlur = 0;
+                    ctx.restore();
+                }
+            },
+
+            drawConnections() {
+                if(!this.map || !this.map.lines) return;
+                const ctx = this.ctx;
+                ctx.lineCap = 'round';
+                ctx.lineJoin = 'round';
+                
+                // Draw background layer for all roads - Neutral high-tech gray-blue (matching Digital Twin 17)
+                ctx.save();
+                ctx.strokeStyle = '#7c8ca0';
+                ctx.globalAlpha = 0.25;
+                ctx.lineWidth = 7;
+                
+                this.map.lines.forEach(l => {
+                    ctx.beginPath();
+                    
+                    // Handle both simple array format [from, to] and waypoint format {from, to, waypoints}
+                    if(Array.isArray(l)) {
+                        // Simple direct line
+                    const n1 = this.map.nodes[l[0]];
+                    const n2 = this.map.nodes[l[1]];
+                    ctx.moveTo(n1.x, n1.y);
+                    ctx.lineTo(n2.x, n2.y);
+                    } else {
+                        // Waypoint path (obstacle avoidance)
+                        const n1 = this.map.nodes[l.from];
+                        const n2 = this.map.nodes[l.to];
+                        ctx.moveTo(n1.x, n1.y);
+                        
+                        // Draw through waypoints if they exist
+                        if(l.waypoints && l.waypoints.length > 0) {
+                            l.waypoints.forEach(wp => {
+                                ctx.lineTo(wp.x, wp.y);
+                            });
+                        }
+                        
+                        ctx.lineTo(n2.x, n2.y);
+                    }
+                ctx.stroke();
+                });
+                ctx.restore();
+
+                // Draw foreground (dashed) - matching Digital Twin 17
+                ctx.save();
+                ctx.strokeStyle = '#7c8ca0';
+                ctx.lineWidth = 3;
+                ctx.globalAlpha = 0.5;
+                ctx.setLineDash([10, 8]);
+                ctx.lineDashOffset = -this.animTime * 30; 
+                
+                this.map.lines.forEach(l => {
+                    ctx.beginPath();
+                    
+                    if(Array.isArray(l)) {
+                        const n1 = this.map.nodes[l[0]];
+                        const n2 = this.map.nodes[l[1]];
+                        ctx.moveTo(n1.x, n1.y);
+                        ctx.lineTo(n2.x, n2.y);
+                    } else {
+                        const n1 = this.map.nodes[l.from];
+                        const n2 = this.map.nodes[l.to];
+                        ctx.moveTo(n1.x, n1.y);
+                        
+                        if(l.waypoints && l.waypoints.length > 0) {
+                            l.waypoints.forEach(wp => {
+                                ctx.lineTo(wp.x, wp.y);
+                            });
+                        }
+                        
+                        ctx.lineTo(n2.x, n2.y);
+                    }
+                ctx.stroke();
+                });
+                
+                ctx.setLineDash([]);
+                ctx.globalAlpha = 1.0;
+                ctx.restore();
+                
+                // === Animated dots on roads (like Digital Twin 17) ===
+                const animationTime = performance.now() * 0.001;
+                const dotSpeed = 50; // Pixels per second
+                const dotSpacing = 60; // Distance between dots
+                const dotSize = 3;
+                
+                ctx.save();
+                ctx.fillStyle = '#a8b8d0'; // Light gray-blue to match neutral road theme
+                ctx.globalAlpha = 0.8;
+                
+                this.map.lines.forEach(l => {
+                    // Build path points array
+                    let pathPoints = [];
+                    
+                    if(Array.isArray(l)) {
+                        // Simple direct line
+                        const n1 = this.map.nodes[l[0]];
+                        const n2 = this.map.nodes[l[1]];
+                        pathPoints = [{x: n1.x, y: n1.y}, {x: n2.x, y: n2.y}];
+                    } else {
+                        // Waypoint path
+                        const n1 = this.map.nodes[l.from];
+                        const n2 = this.map.nodes[l.to];
+                        pathPoints = [{x: n1.x, y: n1.y}];
+                        
+                        if(l.waypoints && l.waypoints.length > 0) {
+                            l.waypoints.forEach(wp => {
+                                pathPoints.push({x: wp.x, y: wp.y});
+                            });
+                        }
+                        
+                        pathPoints.push({x: n2.x, y: n2.y});
+                    }
+                    
+                    if(pathPoints.length < 2) return;
+                    
+                    // Calculate total path length
+                    let totalLength = 0;
+                    const segmentLengths = [];
+                    for (let i = 0; i < pathPoints.length - 1; i++) {
+                        const p1 = pathPoints[i];
+                        const p2 = pathPoints[i + 1];
+                        const segLen = Math.hypot(p2.x - p1.x, p2.y - p1.y);
+                        segmentLengths.push(segLen);
+                        totalLength += segLen;
+                    }
+                    
+                    if (totalLength === 0) return;
+                    
+                    // Draw multiple dots along the path
+                    const numDots = Math.ceil(totalLength / dotSpacing) + 1;
+                    for (let dotIdx = 0; dotIdx < numDots; dotIdx++) {
+                        // Calculate position along path with animation offset
+                        const basePosition = dotIdx * dotSpacing;
+                        const animOffset = (animationTime * dotSpeed) % (totalLength + dotSpacing);
+                        const position = (basePosition - animOffset + totalLength + dotSpacing) % (totalLength + dotSpacing);
+                        
+                        if (position < 0 || position > totalLength) continue;
+                        
+                        // Find which segment this position is on
+                        let currentLength = 0;
+                        let segmentIdx = 0;
+                        for (let i = 0; i < segmentLengths.length; i++) {
+                            if (currentLength + segmentLengths[i] >= position) {
+                                segmentIdx = i;
+                                break;
+                            }
+                            currentLength += segmentLengths[i];
+                        }
+                        
+                        // Calculate position on segment
+                        const segStart = pathPoints[segmentIdx];
+                        const segEnd = pathPoints[segmentIdx + 1];
+                        const segT = segmentLengths[segmentIdx] > 0 
+                            ? (position - currentLength) / segmentLengths[segmentIdx]
+                            : 0;
+                        const dotX = segStart.x + (segEnd.x - segStart.x) * segT;
+                        const dotY = segStart.y + (segEnd.y - segStart.y) * segT;
+                        
+                        // Draw the dot
+                        ctx.beginPath();
+                        ctx.arc(dotX, dotY, dotSize, 0, Math.PI * 2);
+                        ctx.fill();
+                    }
+                });
+                
+                ctx.restore();
+            },
+
+            drawNodes() {
+                if(!this.map || !this.map.neighborhoods) return;
+                const ctx = this.ctx;
+
+                this.map.neighborhoods.forEach(n => {
+                    const minR = 25;
+                    const maxR = 65;
+                    const r = minR + ((n.pop - 20000) / (230000)) * (maxR - minR);
+                    
+                    // UPDATED: Only 4 stats on the visual ring (90 degrees each)
+                    // Accessibility is still calculated globally but not shown on the hub ring to reduce clutter
+                    const stats = ['env', 'eco', 'saf', 'cul'];
+                    const maxAngle = (Math.PI * 2) / 4; // 90 degrees
+                    
+                    // 1. Draw Hub Body (Dark with glow)
+                    ctx.beginPath();
+                    ctx.arc(n.x, n.y, r - 5, 0, Math.PI*2);
+                    ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
+                    ctx.shadowColor = 'rgba(0, 255, 255, 0.3)';
+                    ctx.shadowBlur = 15;
+                    ctx.fill();
+                    ctx.shadowBlur = 0;
+                    ctx.strokeStyle = 'rgba(0, 255, 255, 0.4)';
+                    ctx.lineWidth = 4;
+                    ctx.stroke();
+
+                    // 2. Draw Stats as Radial Bars around the hub
+                    stats.forEach((key, i) => {
+                        const rawVal = n.stats[key];
+                        const val = Math.min(100, Math.max(0, rawVal)); // Strict clamp for visual
+                        const meta = STATS.find(s => s.id === key);
+                        
+                        const start = -Math.PI/2 + (i * maxAngle);
+                        const fillAngle = (val / 100) * maxAngle;
+                        
+                        // Track
+                        ctx.beginPath();
+                        ctx.arc(n.x, n.y, r, start, start + maxAngle);
+                        ctx.strokeStyle = 'rgba(0, 255, 255, 0.15)';
+                        ctx.lineWidth = 6;
+                        ctx.shadowColor = meta.color;
+                        ctx.shadowBlur = 8;
+                        ctx.stroke();
+                        ctx.shadowBlur = 0;
+
+                        // Fill
+                        if(val > 0) {
+                            ctx.beginPath();
+                            ctx.arc(n.x, n.y, r, start, start + fillAngle);
+                            ctx.strokeStyle = meta.color;
+                            ctx.lineWidth = 6;
+                            ctx.shadowColor = meta.color;
+                            ctx.shadowBlur = 12;
+                            ctx.stroke();
+                            ctx.shadowBlur = 0;
+                        }
+                    });
+
+                    // 3. Pop Text with glow
+                    ctx.fillStyle = '#ffffff';
+                    ctx.font = 'bold 11px JetBrains Mono';
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    ctx.shadowColor = 'rgba(0, 255, 255, 0.8)';
+                    ctx.shadowBlur = 10;
+                    const popTxt = (n.pop/1000).toFixed(0) + 'k';
+                    ctx.fillText(popTxt, n.x, n.y);
+                    ctx.shadowBlur = 0;
+                });
+            },
+
+            drawPlacements() {
+                if(!this.placements) return;
+                const ctx = this.ctx;
+                this.placements.forEach(p => {
+                    const b = BUILDINGS.find(x => x.id === p.typeId);
+                    
+                    // Area of effect fill (no stroke) - subtle
+                    ctx.beginPath();
+                    ctx.arc(p.x, p.y, b.range, 0, Math.PI*2);
+                    ctx.fillStyle = b.color;
+                    ctx.globalAlpha = 0.05; // Very subtle, especially with many buildings
+                    ctx.shadowColor = b.color;
+                    ctx.shadowBlur = 10;
+                    ctx.fill();
+                    ctx.shadowBlur = 0;
+                    ctx.globalAlpha = 1;
+
+                    if (b.id === 'factory' && !p.inactive) {
+                        // Factory pollution area (no stroke) - subtle
+                        ctx.beginPath();
+                        ctx.arc(p.x, p.y, 70, 0, Math.PI*2);
+                        ctx.fillStyle = '#ff0066';
+                        ctx.globalAlpha = 0.08; // Subtle pollution indicator
+                        ctx.shadowColor = '#ff0066';
+                        ctx.shadowBlur = 15;
+                        ctx.fill();
+                        ctx.shadowBlur = 0;
+                        ctx.globalAlpha = 1;
+                    }
+
+                    // Draw connection lines to roads only (not hubs) - styled exactly like main roads
+                    if(p.connected) {
+                        // Background layer (same as main roads)
+                        ctx.save();
+                        ctx.strokeStyle = '#7c8ca0';
+                        ctx.globalAlpha = 0.25;
+                        ctx.lineWidth = 7;
+                        ctx.lineCap = 'round';
+                        ctx.lineJoin = 'round';
+                        p.connections.forEach(c => {
+                            if(c.type === 'line') {
+                            ctx.beginPath();
+                            ctx.moveTo(p.x, p.y);
+                            ctx.lineTo(c.x, c.y);
+                            ctx.stroke();
+                            }
+                        });
+                        ctx.restore();
+                        
+                        // Foreground dashed line (same as main roads)
+                        ctx.save();
+                        ctx.strokeStyle = '#7c8ca0';
+                        ctx.lineWidth = 3;
+                        ctx.globalAlpha = 0.5;
+                        ctx.setLineDash([10, 8]);
+                        ctx.lineDashOffset = -this.animTime * 30;
+                        ctx.lineCap = 'round';
+                        ctx.lineJoin = 'round';
+                        p.connections.forEach(c => {
+                            if(c.type === 'line') {
+                                ctx.beginPath();
+                                ctx.moveTo(p.x, p.y);
+                                ctx.lineTo(c.x, c.y);
+                                ctx.stroke();
+                            }
+                        });
+                        ctx.setLineDash([]);
+                        ctx.globalAlpha = 1.0;
+                        ctx.restore();
+                    }
+                });
+                
+                // === Animated dots on building connection lines (aux roads) ===
+                const animationTime = performance.now() * 0.001;
+                const dotSpeed = 50;
+                const dotSpacing = 60;
+                const dotSize = 3;
+                
+                ctx.save();
+                ctx.fillStyle = '#a8b8d0';
+                ctx.globalAlpha = 0.8;
+                
+                this.placements.forEach(p => {
+                    if(!p.connected) return;
+                    
+                    p.connections.forEach(c => {
+                        if(c.type !== 'line') return;
+                        
+                        // Build path from building to connection point
+                        const pathPoints = [
+                            {x: p.x, y: p.y},
+                            {x: c.x, y: c.y}
+                        ];
+                        
+                        // Calculate path length
+                        const totalLength = Math.hypot(c.x - p.x, c.y - p.y);
+                        if (totalLength === 0) return;
+                        
+                        // Draw multiple dots along the path
+                        const numDots = Math.ceil(totalLength / dotSpacing) + 1;
+                        for (let dotIdx = 0; dotIdx < numDots; dotIdx++) {
+                            const basePosition = dotIdx * dotSpacing;
+                            const animOffset = (animationTime * dotSpeed) % (totalLength + dotSpacing);
+                            const position = (basePosition - animOffset + totalLength + dotSpacing) % (totalLength + dotSpacing);
+                            
+                            if (position < 0 || position > totalLength) continue;
+                            
+                            // Calculate position along line
+                            const t = position / totalLength;
+                            const dotX = p.x + (c.x - p.x) * t;
+                            const dotY = p.y + (c.y - p.y) * t;
+                            
+                            // Draw the dot
+                            ctx.beginPath();
+                            ctx.arc(dotX, dotY, dotSize, 0, Math.PI * 2);
+                            ctx.fill();
+                        }
+                    });
+                });
+                
+                ctx.restore();
+                
+                // Draw building icons
+                this.placements.forEach(p => {
+                    const b = BUILDINGS.find(x => x.id === p.typeId);
+                    const size = b.size === 'large' ? 14 : 10;
+                    ctx.beginPath();
+                    ctx.arc(p.x, p.y, size + 4, 0, Math.PI*2);
+                    ctx.fillStyle = '#111';
+                    ctx.fill();
+                    ctx.lineWidth = 4;
+                    
+                    // Inactive buildings (on obstacles) are grayed out
+                    if(p.inactive) {
+                        ctx.strokeStyle = '#666';
+                        ctx.globalAlpha = 0.5;
+                    } else {
+                        ctx.strokeStyle = p.connected ? b.color : '#ff0066';
+                    }
+                    ctx.stroke();
+                    ctx.globalAlpha = 1;
+
+                    ctx.save();
+                    ctx.translate(p.x, p.y);
+                    const scale = (size * 1.5) / 24; 
+                    ctx.scale(scale, scale);
+                    ctx.translate(-12, -12); 
+                    // Inactive buildings have grayed out icons
+                    if(p.inactive) {
+                        ctx.fillStyle = '#666';
+                        ctx.globalAlpha = 0.5;
+                    } else {
+                    ctx.fillStyle = b.color;
+                    }
+                    ctx.fill(this.iconPaths[b.iconKey]);
+                    ctx.globalAlpha = 1;
+                    ctx.restore();
+                });
+            },
+
+            drawDragPreview() {
+                if(this.draggingId) {
+                    const b = BUILDINGS.find(x => x.id === this.draggingId);
+                    const ctx = this.ctx;
+                    
+                    // Check if position is on obstacle (will be inactive)
+                    const obstacleType = this.checkObstacle(this.mouseX, this.mouseY);
+                    const willBeInactive = obstacleType !== null;
+                    const isValidCollision = !this.checkCollision(this.mouseX, this.mouseY);
+                    
+                    // Color: gray if on obstacle, red if collision, normal color if valid
+                    let color;
+                    if(willBeInactive) {
+                        color = '#666'; // Gray for inactive
+                    } else if(!isValidCollision) {
+                        color = '#ff0066'; // Red for collision
+                    } else {
+                        color = b.color; // Normal color
+                    }
+
+                    // Show obstacle areas when hovering over them
+                    if(this.map.obstacles && willBeInactive) {
+                        ctx.save();
+                        this.map.obstacles.forEach(obs => {
+                            const dist = Math.hypot(obs.x - this.mouseX, obs.y - this.mouseY);
+                            if(dist < obs.radius + 30) {
+                                ctx.beginPath();
+                                ctx.arc(obs.x, obs.y, obs.radius, 0, Math.PI * 2);
+                                ctx.strokeStyle = '#ffaa00';
+                                ctx.lineWidth = 4;
+                                ctx.globalAlpha = 0.8;
+                                ctx.setLineDash([5, 5]);
+                                ctx.stroke();
+                                ctx.setLineDash([]);
+                            }
+                        });
+                        ctx.globalAlpha = 1;
+                        ctx.restore();
+                    }
+
+                    // Area of effect fill (no stroke) - subtle preview (skip if inactive)
+                    if(!willBeInactive) {
+                    ctx.beginPath();
+                    ctx.arc(this.mouseX, this.mouseY, b.range, 0, Math.PI*2);
+                    ctx.fillStyle = color;
+                        ctx.globalAlpha = 0.12; // Subtle preview
+                    ctx.fill();
+                    ctx.globalAlpha = 1;
+
+                    if (b.id === 'factory') {
+                            // Factory pollution area (no stroke) - subtle
+                        ctx.beginPath();
+                        ctx.arc(this.mouseX, this.mouseY, 70, 0, Math.PI*2);
+                            ctx.fillStyle = '#ff0066';
+                            ctx.globalAlpha = 0.1; // Subtle pollution preview
+                        ctx.fill();
+                        ctx.globalAlpha = 1;
+                        }
+                    }
+
+                    // Building base - always visible, even over obstacles
+                    const size = b.size === 'large' ? 14 : 10;
+                    ctx.beginPath();
+                    ctx.arc(this.mouseX, this.mouseY, size + 4, 0, Math.PI*2);
+                    ctx.fillStyle = '#111';
+                    ctx.fill();
+                    ctx.lineWidth = 4;
+                    ctx.strokeStyle = color;
+                    if(willBeInactive) {
+                        ctx.globalAlpha = 0.5; // Grayed out for inactive
+                    }
+                    ctx.stroke();
+                    ctx.globalAlpha = 1;
+                    
+                    // Building icon - always visible
+                    ctx.save();
+                    ctx.translate(this.mouseX, this.mouseY);
+                    const scale = (size * 1.5) / 24; 
+                    ctx.scale(scale, scale);
+                    ctx.translate(-12, -12); 
+                    ctx.fillStyle = color;
+                    if(willBeInactive) {
+                        ctx.globalAlpha = 0.5; // Grayed out for inactive
+                    }
+                    if(this.iconPaths[b.iconKey]) {
+                        ctx.fill(this.iconPaths[b.iconKey]);
+                    }
+                    ctx.globalAlpha = 1;
+                    ctx.restore();
+                    
+                    // Show connection lines to roads only (not hubs) - styled like main roads
+                    // Skip connection lines if on obstacle (will be inactive)
+                    const conns = willBeInactive ? [] : this.getConnectivity(this.mouseX, this.mouseY);
+                    if(conns.length > 0 && isValidCollision) {
+                        // Background layer (same as main roads)
+                        ctx.save();
+                        ctx.strokeStyle = '#7c8ca0';
+                        ctx.globalAlpha = 0.25;
+                        ctx.lineWidth = 7;
+                        ctx.lineCap = 'round';
+                        ctx.lineJoin = 'round';
+                        conns.forEach(c => {
+                            if(c.type === 'line') {
+                                ctx.beginPath();
+                                ctx.moveTo(this.mouseX, this.mouseY);
+                                ctx.lineTo(c.x, c.y);
+                                ctx.stroke();
+                            }
+                        });
+                        ctx.restore();
+                        
+                        // Foreground dashed line (same as main roads)
+                        ctx.save();
+                        ctx.strokeStyle = '#7c8ca0';
+                        ctx.lineWidth = 3;
+                        ctx.globalAlpha = 0.5;
+                        ctx.setLineDash([10, 8]);
+                        ctx.lineDashOffset = -this.animTime * 30;
+                        ctx.lineCap = 'round';
+                        ctx.lineJoin = 'round';
+                        conns.forEach(c => {
+                            if(c.type === 'line') {
+                                ctx.beginPath();
+                                ctx.moveTo(this.mouseX, this.mouseY);
+                                ctx.lineTo(c.x, c.y);
+                                ctx.stroke();
+                            }
+                        });
+                        ctx.setLineDash([]);
+                        ctx.globalAlpha = 1.0;
+                        ctx.restore();
+                    }
+                }
+            }
+        };
+
+        window.onload = () => gameApp.init();
+
+    </script>
+</body>
+</html>

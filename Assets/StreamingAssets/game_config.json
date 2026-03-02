@@ -1,0 +1,103 @@
+{
+  "meta": {
+    "version": "1.0.0",
+    "defaultLanguage": "EN"
+  },
+  "session": {
+    "introSeconds": 90,
+    "gameplaySeconds": 270,
+    "maxPlayers": 4
+  },
+  "budget": {
+    "mode": "PerQuadrant",
+    "startingBudget": 1000
+  },
+  "scoring": {
+    "qolCapPerMetric": 20,
+    "epsilonDistance": 0.1
+  },
+  "accessibility": {
+    "walkingDistance": 0.5,
+    "snapToTransitMaxDistance": 0.5
+  },
+  "osc": {
+    "sources": [
+      { "id": "Q1", "listenPort": 9001, "expectedSenderIp": "192.168.0.101" },
+      { "id": "Q2", "listenPort": 9002, "expectedSenderIp": "192.168.0.102" },
+      { "id": "Q3", "listenPort": 9003, "expectedSenderIp": "192.168.0.103" },
+      { "id": "Q4", "listenPort": 9004, "expectedSenderIp": "192.168.0.104" }
+    ]
+  },
+  "buildings": [
+    { "id": "garden", "category": "Environment", "impactSize": "Small", "importance": 0.6, "price": 180, "baseValues": { "environment": 5, "economy": 2, "healthSafety": -2, "cultureEdu": 2 }, "localizationKey": "building.garden.name" },
+    { "id": "park", "category": "Environment", "impactSize": "Large", "importance": 0.7, "price": 350, "baseValues": { "environment": 12, "economy": 1, "healthSafety": 2, "cultureEdu": 4 }, "localizationKey": "building.park.name" },
+    { "id": "recycling_plant", "category": "Environment", "impactSize": "Large", "importance": 0.5, "price": 420, "baseValues": { "environment": 10, "economy": 3, "healthSafety": -1, "cultureEdu": 0 }, "localizationKey": "building.recycling_plant.name" },
+    { "id": "office", "category": "Economy", "impactSize": "Small", "importance": 0.7, "price": 250, "baseValues": { "environment": -1, "economy": 8, "healthSafety": 0, "cultureEdu": 1 }, "localizationKey": "building.office.name" },
+    { "id": "mall", "category": "Economy", "impactSize": "Large", "importance": 0.6, "price": 500, "baseValues": { "environment": -2, "economy": 12, "healthSafety": 0, "cultureEdu": 3 }, "localizationKey": "building.mall.name" },
+    { "id": "factory", "category": "Economy", "impactSize": "Large", "importance": 0.5, "price": 400, "baseValues": { "environment": -8, "economy": 15, "healthSafety": -3, "cultureEdu": 0 }, "localizationKey": "building.factory.name" },
+    { "id": "police_station", "category": "HealthSafety", "impactSize": "Small", "importance": 0.8, "price": 300, "baseValues": { "environment": 0, "economy": 0, "healthSafety": 10, "cultureEdu": 0 }, "localizationKey": "building.police_station.name" },
+    { "id": "fire_station", "category": "HealthSafety", "impactSize": "Small", "importance": 0.8, "price": 280, "baseValues": { "environment": 0, "economy": 0, "healthSafety": 10, "cultureEdu": 0 }, "localizationKey": "building.fire_station.name" },
+    { "id": "hospital", "category": "HealthSafety", "impactSize": "Large", "importance": 0.9, "price": 480, "baseValues": { "environment": 0, "economy": 2, "healthSafety": 14, "cultureEdu": 2 }, "localizationKey": "building.hospital.name" },
+    { "id": "school", "category": "CultureEdu", "impactSize": "Small", "importance": 0.7, "price": 220, "baseValues": { "environment": 1, "economy": 1, "healthSafety": 1, "cultureEdu": 8 }, "localizationKey": "building.school.name" },
+    { "id": "museum", "category": "CultureEdu", "impactSize": "Large", "importance": 0.6, "price": 400, "baseValues": { "environment": 0, "economy": 2, "healthSafety": 0, "cultureEdu": 12 }, "localizationKey": "building.museum.name" },
+    { "id": "state_circus", "category": "CultureEdu", "impactSize": "Large", "importance": 0.5, "price": 350, "baseValues": { "environment": 0, "economy": 3, "healthSafety": 0, "cultureEdu": 10 }, "localizationKey": "building.state_circus.name" }
+  ],
+  "map": {
+    "nodes": [
+      { "x": 60, "y": 60, "population": 50000 },
+      { "x": 240, "y": 60, "population": 50000 },
+      { "x": 240, "y": 240, "population": 50000 },
+      { "x": 60, "y": 240, "population": 50000 }
+    ],
+    "edges": [
+      { "from": 0, "to": 1, "length": 180 },
+      { "from": 1, "to": 2, "length": 180 },
+      { "from": 2, "to": 3, "length": 180 },
+      { "from": 3, "to": 0, "length": 180 },
+      { "from": 0, "to": 2, "length": 254.5 },
+      { "from": 1, "to": 3, "length": 254.5 }
+    ],
+    "obstacles": []
+  },
+  "tooltips": {
+    "introKeys": []
+  },
+  "endMessages": [
+    { "min": 0, "max": 20, "titleKey": "end.0_20.title", "bodyKey": "end.0_20.body" },
+    { "min": 20, "max": 40, "titleKey": "end.20_40.title", "bodyKey": "end.20_40.body" },
+    { "min": 40, "max": 60, "titleKey": "end.40_60.title", "bodyKey": "end.40_60.body" },
+    { "min": 60, "max": 80, "titleKey": "end.60_80.title", "bodyKey": "end.60_80.body" },
+    { "min": 80, "max": 100, "titleKey": "end.80_100.title", "bodyKey": "end.80_100.body" }
+  ],
+  "localization": {
+    "EN": {
+      "building.garden.name": "Garden",
+      "building.park.name": "Park",
+      "building.recycling_plant.name": "Recycling Plant",
+      "building.office.name": "Office",
+      "building.mall.name": "Mall",
+      "building.factory.name": "Factory",
+      "building.police_station.name": "Police Station",
+      "building.fire_station.name": "Fire Station",
+      "building.hospital.name": "Hospital",
+      "building.school.name": "School",
+      "building.museum.name": "Museum",
+      "building.state_circus.name": "State Circus",
+      "ui.budget": "Budget",
+      "ui.qol": "Quality of Life",
+      "ui.timer": "Time",
+      "end.0_20.title": "Critical",
+      "end.0_20.body": "Re-balancing required.",
+      "end.20_40.title": "Low",
+      "end.20_40.body": "Systems need improvement.",
+      "end.40_60.title": "Moderate",
+      "end.40_60.body": "Systems nominal.",
+      "end.60_80.title": "Good",
+      "end.60_80.body": "City thriving.",
+      "end.80_100.title": "Excellent",
+      "end.80_100.body": "Optimization excellent."
+    },
+    "RU": {},
+    "KZ": {}
+  }
+}
