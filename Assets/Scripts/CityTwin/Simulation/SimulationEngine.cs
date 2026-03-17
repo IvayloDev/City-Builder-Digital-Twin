@@ -5,7 +5,7 @@ using CityTwin.Core;
 
 namespace CityTwin.Simulation
 {
-    /// <summary>Per-instance simulation engine. Matches HTML reference: only buildings connected to roads affect hubs; inverse-square influence; accessibility = proximity + service blend + connection bonus.</summary>
+    /// <summary>Per-instance simulation engine. Spec formulas: MetricScore = (BaseValue x Pop) / RadialDist; Accessibility = (Importance x Pop) / TransitDist; QOL = sum of 5 metrics capped at 20 each.</summary>
     public class SimulationEngine : MonoBehaviour
     {
         [SerializeField] private float epsilonDistance = 0.1f;
@@ -15,13 +15,19 @@ namespace CityTwin.Simulation
         private List<BuildingDefinition> _buildingCatalog = new List<BuildingDefinition>();
         private TransitGraph _transitGraph = new TransitGraph();
         private List<(Vector2 center, float radius)> _obstacles = new List<(Vector2, float)>();
-        /// <summary>When set (prefab-driven hubs), use (BaseValue × Population) / RadialDistance for metrics. Empty = use TransitGraph nodes.</summary>
+        /// <summary>When set (prefab-driven hubs), use (BaseValue x Population) / RadialDistance for metrics. Empty = use TransitGraph nodes.</summary>
         private List<(Vector2 position, float population)> _scoringHubs = new List<(Vector2, float)>();
         private int _nextTileId;
 
+        private float _walkingDistance = 200f;
         private float _roadConnectRange = 200f;
         private float _zoneRadius = 200f;
         private float _defaultConnectionRadius = 500f;
+        private float _populationScale = 1000f;
+
+        private const float RadiusSmall = 150f;
+        private const float RadiusMedium = 300f;
+        private const float RadiusLarge = 500f;
 
         private float _qol;
         private float _environment;
@@ -37,6 +43,28 @@ namespace CityTwin.Simulation
         public float CultureEdu => _cultureEdu;
         public float Accessibility => _accessibility;
 
+        public struct HubMetricSnapshot
+        {
+            public int HubIndex;
+            public float Environment;
+            public float Economy;
+            public float HealthSafety;
+            public float CultureEdu;
+            public float Accessibility;
+        }
+
+        private readonly List<HubMetricSnapshot> _hubMetrics = new List<HubMetricSnapshot>();
+        public IReadOnlyList<HubMetricSnapshot> HubMetrics => _hubMetrics;
+
+        public struct TileHubConnection
+        {
+            public string TileId;
+            public int HubIndex;
+        }
+
+        private readonly List<TileHubConnection> _activeConnections = new List<TileHubConnection>();
+        public IReadOnlyList<TileHubConnection> ActiveConnections => _activeConnections;
+
         public event Action OnMetricsChanged;
 
         [Tooltip("Log current metrics to console whenever they are recalculated (e.g. when no UI yet).")]
@@ -47,13 +75,15 @@ namespace CityTwin.Simulation
             _buildingCatalog = catalog ?? new List<BuildingDefinition>();
         }
 
-        public void SetConfig(float epsilon, float qolCap, float walkingDist, float roadConnectRange = 200f, float zoneRadius = 200f, float defaultConnectionRadius = 500f)
+        public void SetConfig(float epsilon, float qolCap, float walkingDist, float roadConnectRange = 200f, float zoneRadius = 200f, float defaultConnectionRadius = 500f, float populationScale = 1000f)
         {
             epsilonDistance = Mathf.Max(0.01f, epsilon);
             qolCapPerMetric = Mathf.Max(1f, qolCap);
+            _walkingDistance = Mathf.Max(1f, walkingDist);
             _roadConnectRange = Mathf.Max(1f, roadConnectRange);
             _zoneRadius = Mathf.Max(1f, zoneRadius);
             _defaultConnectionRadius = Mathf.Max(1f, defaultConnectionRadius);
+            _populationScale = Mathf.Max(1f, populationScale);
         }
 
         public void SetTransitGraph(TransitGraph graph)
@@ -146,7 +176,7 @@ namespace CityTwin.Simulation
                 for (int i = 0; i < hubCount; i++)
                 {
                     hubPositions[i] = _scoringHubs[i].position;
-                    hubPopulations[i] = _scoringHubs[i].population;
+                    hubPopulations[i] = _scoringHubs[i].population / _populationScale;
                 }
                 useSpecFormula = true;
             }
@@ -157,6 +187,8 @@ namespace CityTwin.Simulation
                 {
                     _environment = _economy = _healthSafety = _cultureEdu = _accessibility = 0f;
                     _qol = 0f;
+                    _activeConnections.Clear();
+                    _hubMetrics.Clear();
                     if (logMetricsWhenChanged)
                         Debug.Log("[Metrics] QOL=0 (no hubs/graph) | tiles=" + _placedTiles.Count);
                     OnMetricsChanged?.Invoke();
@@ -168,7 +200,7 @@ namespace CityTwin.Simulation
                 for (int i = 0; i < hubCount; i++)
                 {
                     hubPositions[i] = nodes[i].Position;
-                    hubPopulations[i] = nodes[i].Population;
+                    hubPopulations[i] = nodes[i].Population / _populationScale;
                 }
                 useSpecFormula = false;
             }
@@ -177,114 +209,133 @@ namespace CityTwin.Simulation
             float[] hubEco = new float[hubCount];
             float[] hubSaf = new float[hubCount];
             float[] hubCul = new float[hubCount];
+            float[] hubAcc = new float[hubCount];
 
-            int connectedCount = 0;
-            foreach (var t in _placedTiles)
+            _activeConnections.Clear();
+
+            // --- Standard metrics: (BaseValue x Population) / RadialDistance ---
+            // Spec path: no road-connectivity gate; tiles affect hubs purely by radial distance.
+            // Legacy path: road-connected + inverse-square influence (kept for backward compat).
+            if (useSpecFormula)
             {
-                if (t.Inactive) continue;
-                float distToRoad = _transitGraph.DistanceToNearestSegment(t.Position);
-                if (distToRoad <= _roadConnectRange) connectedCount++;
-            }
-
-            float globalConnectionBonus = connectedCount == 0 ? 0 : Mathf.Min(15f, 5f + Mathf.Round((float)(Math.Log(connectedCount + 1) / Math.Log(2)) * 5f));
-
-            foreach (var t in _placedTiles)
-            {
-                if (t.Inactive) continue;
-                float distToRoad = _transitGraph.DistanceToNearestSegment(t.Position);
-                bool connected = distToRoad <= _roadConnectRange;
-                if (!connected) continue;
-
-                var b = GetBuilding(t.BuildingId);
-                if (b == null || b.BaseValues == null) continue;
-
-                float connectionRadius = b.ConnectionRadius > 0 ? b.ConnectionRadius : _defaultConnectionRadius;
-                var v = b.BaseValues;
-
-                for (int i = 0; i < hubCount; i++)
+                foreach (var t in _placedTiles)
                 {
-                    var hubPos = hubPositions[i];
-                    float dist = Vector2.Distance(t.Position, hubPos);
-                    if (dist > connectionRadius) continue;
+                    if (t.Inactive) continue;
+                    var b = GetBuilding(t.BuildingId);
+                    if (b == null || b.BaseValues == null) continue;
 
-                    float radialDist = Mathf.Max(dist, epsilonDistance);
+                    float connectionRadius = GetConnectionRadius(b);
+                    var v = b.BaseValues;
 
-                    if (useSpecFormula)
+                    for (int i = 0; i < hubCount; i++)
                     {
+                        float dist = Vector2.Distance(t.Position, hubPositions[i]);
+                        if (dist > connectionRadius) continue;
+
+                        _activeConnections.Add(new TileHubConnection { TileId = t.TileId, HubIndex = i });
+
+                        float radialDist = Mathf.Max(dist, epsilonDistance);
                         float pop = hubPopulations[i];
                         float scale = pop / radialDist;
+
                         hubEnv[i] += v.environment * scale;
                         hubEco[i] += v.economy * scale;
                         hubSaf[i] += v.healthSafety * scale;
                         hubCul[i] += v.cultureEdu * scale;
-                        if (v.economy != 0) hubEnv[i] -= v.economy * 0.3f * scale;
-                        if (v.environment != 0) hubEco[i] -= v.environment * 0.3f * scale;
                     }
-                    else
+                }
+            }
+            else
+            {
+                foreach (var t in _placedTiles)
+                {
+                    if (t.Inactive) continue;
+                    float distToRoad = _transitGraph.DistanceToNearestSegment(t.Position);
+                    if (distToRoad > _roadConnectRange) continue;
+
+                    var b = GetBuilding(t.BuildingId);
+                    if (b == null || b.BaseValues == null) continue;
+
+                    float connectionRadius = GetConnectionRadius(b);
+                    var v = b.BaseValues;
+
+                    for (int i = 0; i < hubCount; i++)
                     {
+                        float dist = Vector2.Distance(t.Position, hubPositions[i]);
+                        if (dist > connectionRadius) continue;
+
+                        _activeConnections.Add(new TileHubConnection { TileId = t.TileId, HubIndex = i });
+
                         float normalizedDist = dist / connectionRadius;
                         float influence = 1f - (normalizedDist * normalizedDist);
 
-                        if (b.Id == "factory")
-                        {
-                            const float innerRadius = 70f;
-                            if (dist < innerRadius)
-                            {
-                                hubEco[i] -= 4f * influence;
-                                hubEnv[i] -= 4f * influence;
-                                hubSaf[i] -= 3f * influence;
-                                hubCul[i] -= 3f * influence;
-                            }
-                            else
-                            {
-                                float donutPower = Mathf.Clamp01((dist - innerRadius) / Mathf.Max(1f, connectionRadius - innerRadius)) * influence;
-                                hubEco[i] += 15f * donutPower;
-                                hubEnv[i] -= 5f * donutPower;
-                            }
-                        }
-                        else
-                        {
-                            hubEnv[i] += v.environment * influence;
-                            hubEco[i] += v.economy * influence;
-                            hubSaf[i] += v.healthSafety * influence;
-                            hubCul[i] += v.cultureEdu * influence;
-                            if (v.economy != 0) hubEnv[i] -= v.economy * 0.3f * influence;
-                            if (v.environment != 0) hubEco[i] -= v.environment * 0.3f * influence;
-                        }
+                        hubEnv[i] += v.environment * influence;
+                        hubEco[i] += v.economy * influence;
+                        hubSaf[i] += v.healthSafety * influence;
+                        hubCul[i] += v.cultureEdu * influence;
                     }
                 }
             }
 
+            // --- Accessibility: (Importance x Population) / TransitDistance ---
+            // Transit distance = walk from tile to nearest transit segment + shortest graph path to hub.
+            // Map each hub to its nearest transit node for Dijkstra lookups.
+            bool hasTransit = _transitGraph.Nodes.Count > 0 && _transitGraph.Edges.Count > 0;
+            int[] hubTransitNodeIds = new int[hubCount];
+            if (hasTransit)
+            {
+                for (int i = 0; i < hubCount; i++)
+                    hubTransitNodeIds[i] = _transitGraph.NearestNodeId(hubPositions[i]);
+            }
+
+            foreach (var t in _placedTiles)
+            {
+                if (t.Inactive) continue;
+                var b = GetBuilding(t.BuildingId);
+                if (b == null) continue;
+
+                if (!hasTransit)
+                {
+                    // No transit graph: fall back to radial distance for accessibility
+                    for (int i = 0; i < hubCount; i++)
+                    {
+                        float dist = Vector2.Distance(t.Position, hubPositions[i]);
+                        float connectionRadius = GetConnectionRadius(b);
+                        if (dist > connectionRadius) continue;
+                        float radialDist = Mathf.Max(dist, epsilonDistance);
+                        hubAcc[i] += (b.Importance * hubPopulations[i]) / radialDist;
+                    }
+                    continue;
+                }
+
+                float walkDist = _transitGraph.DistanceToNearestSegment(t.Position);
+                if (walkDist > _walkingDistance) continue;
+
+                int nearestNode = _transitGraph.NearestNodeId(t.Position);
+                if (nearestNode < 0) continue;
+
+                var dijkDist = _transitGraph.Dijkstra(nearestNode);
+
+                for (int i = 0; i < hubCount; i++)
+                {
+                    int hubNodeId = hubTransitNodeIds[i];
+                    if (!dijkDist.TryGetValue(hubNodeId, out float graphDist) || graphDist >= float.MaxValue)
+                        continue;
+
+                    float transitDist = Mathf.Max(walkDist + graphDist, epsilonDistance);
+                    hubAcc[i] += (b.Importance * hubPopulations[i]) / transitDist;
+                }
+            }
+
+            // --- Aggregate per-hub scores, average across hubs, clamp each metric to [0, qolCapPerMetric] ---
             float sumEnv = 0, sumEco = 0, sumSaf = 0, sumCul = 0, sumAcc = 0;
             for (int i = 0; i < hubCount; i++)
             {
-                float ampEnv = Mathf.Clamp(hubEnv[i] * (useSpecFormula ? 1f : 20f), 0f, 100f);
-                float ampEco = Mathf.Clamp(hubEco[i] * (useSpecFormula ? 1f : 20f), 0f, 100f);
-                float ampSaf = Mathf.Clamp(hubSaf[i] * (useSpecFormula ? 1f : 20f), 0f, 100f);
-                float ampCul = Mathf.Clamp(hubCul[i] * (useSpecFormula ? 1f : 20f), 0f, 100f);
-
-                var hubPos = hubPositions[i];
-                int zoneBuildings = 0, connectedNearHub = 0;
-                foreach (var t in _placedTiles)
-                {
-                    if (t.Inactive) continue;
-                    float d = Vector2.Distance(t.Position, hubPos);
-                    if (d >= _zoneRadius) continue;
-                    zoneBuildings++;
-                    if (_transitGraph.DistanceToNearestSegment(t.Position) <= _roadConnectRange)
-                        connectedNearHub++;
-                }
-                float proximityRatio = zoneBuildings > 0 ? (float)connectedNearHub / zoneBuildings : 0f;
-                float proximityScore = Mathf.Round(proximityRatio * 70f);
-                float serviceBlend = (ampEnv + ampEco + ampSaf + ampCul) / 4f;
-                float serviceContribution = Mathf.Round(serviceBlend * 0.3f);
-                float acc = Mathf.Min(100f, proximityScore + serviceContribution + globalConnectionBonus);
-
-                sumEnv += ampEnv;
-                sumEco += ampEco;
-                sumSaf += ampSaf;
-                sumCul += ampCul;
-                sumAcc += acc;
+                sumEnv += Mathf.Clamp(hubEnv[i], 0f, 100f);
+                sumEco += Mathf.Clamp(hubEco[i], 0f, 100f);
+                sumSaf += Mathf.Clamp(hubSaf[i], 0f, 100f);
+                sumCul += Mathf.Clamp(hubCul[i], 0f, 100f);
+                sumAcc += Mathf.Clamp(hubAcc[i], 0f, 100f);
             }
 
             float n = hubCount;
@@ -292,22 +343,59 @@ namespace CityTwin.Simulation
             _economy = Mathf.Clamp(sumEco / n, 0f, qolCapPerMetric);
             _healthSafety = Mathf.Clamp(sumSaf / n, 0f, qolCapPerMetric);
             _cultureEdu = Mathf.Clamp(sumCul / n, 0f, qolCapPerMetric);
-            _accessibility = sumAcc / n;
+            _accessibility = Mathf.Clamp(sumAcc / n, 0f, qolCapPerMetric);
 
-            float qolScore = (_environment + _economy + _healthSafety + _cultureEdu + _accessibility) / 5f;
-            float minStat = Mathf.Min(_environment, _economy, _healthSafety, _cultureEdu, _accessibility);
-            _qol = minStat < 20f ? qolScore * 0.9f : qolScore;
-            _qol = Mathf.Clamp(Mathf.Round(_qol), 0f, 100f);
+            // QOL = sum of 5 metrics (each capped at 20), giving 0-100
+            _qol = Mathf.Clamp(
+                Mathf.Round(_environment + _economy + _healthSafety + _cultureEdu + _accessibility),
+                0f, 100f);
+
+            _hubMetrics.Clear();
+            for (int i = 0; i < hubCount; i++)
+            {
+                _hubMetrics.Add(new HubMetricSnapshot
+                {
+                    HubIndex = i,
+                    Environment = Mathf.Clamp(hubEnv[i], 0f, 100f),
+                    Economy = Mathf.Clamp(hubEco[i], 0f, 100f),
+                    HealthSafety = Mathf.Clamp(hubSaf[i], 0f, 100f),
+                    CultureEdu = Mathf.Clamp(hubCul[i], 0f, 100f),
+                    Accessibility = Mathf.Clamp(hubAcc[i], 0f, 100f)
+                });
+            }
 
             if (logMetricsWhenChanged)
             {
-                string posInfo = _placedTiles.Count > 0
-                    ? $" | tile0 pos=({_placedTiles[0].Position.x:F0},{_placedTiles[0].Position.y:F0})"
-                    : "";
-                Debug.Log($"[Metrics] QOL={_qol:F0} | Env={_environment:F1} Eco={_economy:F1} Safe={_healthSafety:F1} Cul={_cultureEdu:F1} Access={_accessibility:F1} | tiles={_placedTiles.Count}{posInfo}");
+                string posInfo = "";
+                if (_placedTiles.Count > 0)
+                {
+                    var t0 = _placedTiles[0];
+                    posInfo = $" | tile0 pos=({t0.Position.x:F1},{t0.Position.y:F1})";
+                    for (int i = 0; i < hubCount; i++)
+                    {
+                        float d = Vector2.Distance(t0.Position, hubPositions[i]);
+                        posInfo += $" d[hub{i}]={d:F1}";
+                    }
+                }
+                string hubInfo = "";
+                for (int i = 0; i < hubCount; i++)
+                    hubInfo += $" hub{i}=({hubPositions[i].x:F1},{hubPositions[i].y:F1}) pop={hubPopulations[i]:F1}";
+                //Debug.Log($"[Metrics] QOL={_qol:F0} | Env={_environment:F1} Eco={_economy:F1} Safe={_healthSafety:F1} Cul={_cultureEdu:F1} Access={_accessibility:F1} | tiles={_placedTiles.Count} conns={_activeConnections.Count}{posInfo} |{hubInfo}");
             }
 
             OnMetricsChanged?.Invoke();
+        }
+
+        private float GetConnectionRadius(BuildingDefinition b)
+        {
+            if (b.ConnectionRadius > 0) return b.ConnectionRadius;
+            switch (b.ImpactSize)
+            {
+                case "Small":  return RadiusSmall;
+                case "Medium": return RadiusMedium;
+                case "Large":  return RadiusLarge;
+                default:       return _defaultConnectionRadius;
+            }
         }
 
         private BuildingDefinition GetBuilding(string buildingId)

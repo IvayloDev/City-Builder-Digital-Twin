@@ -23,7 +23,7 @@ namespace CityTwin.UI
             if (debugText == null)
                 debugText = GetComponent<TextMeshProUGUI>();
             if (hubRegistry == null)
-                hubRegistry = FindFirstObjectByType<HubRegistry>();
+                hubRegistry = GetComponentInParent<HubRegistry>(true) ?? GetComponentInChildren<HubRegistry>(true);
             if (debugText != null)
                 debugText.gameObject.SetActive(_visible && showInGame);
         }

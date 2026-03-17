@@ -30,6 +30,24 @@ namespace CityTwin.UI
             if (contentRoot == null) contentRoot = GetComponentInChildren<RectTransform>(true);
         }
 
+        /// <summary>Convert raw TUIO (0-1) position to content root local space, applying flipY and centerOrigin.</summary>
+        public Vector2 TuioToLocalPosition(Vector2 tuioRaw)
+        {
+            Vector2 pos = tuioRaw;
+            if (flipY) pos.y = 1f - pos.y;
+            return TuioToLocal(pos);
+        }
+
+        /// <summary>Convert any world position to content root local space (2D).</summary>
+        public Vector2 WorldToContentLocal(Vector3 worldPos)
+        {
+            if (contentRoot == null) return new Vector2(worldPos.x, worldPos.y);
+            Vector3 local = contentRoot.InverseTransformPoint(worldPos);
+            return new Vector2(local.x, local.y);
+        }
+
+        public RectTransform ContentRoot => contentRoot;
+
         private Vector2 TuioToLocal(Vector2 pos)
         {
             if (centerOrigin)
@@ -100,6 +118,19 @@ namespace CityTwin.UI
             if (!_spawned.TryGetValue(engineTileId, out GameObject go)) return;
             _spawned.Remove(engineTileId);
             if (go != null) Destroy(go);
+        }
+
+        /// <summary>Get the local-space position of a spawned building marker. Returns false if not found.</summary>
+        public bool TryGetMarkerPosition(string engineTileId, out Vector2 localPos)
+        {
+            localPos = Vector2.zero;
+            if (string.IsNullOrEmpty(engineTileId)) return false;
+            if (!_spawned.TryGetValue(engineTileId, out GameObject go) || go == null) return false;
+            if (go.transform is RectTransform rt)
+                localPos = rt.anchoredPosition;
+            else
+                localPos = new Vector2(go.transform.localPosition.x, go.transform.localPosition.y);
+            return true;
         }
 
         /// <summary>Remove all spawned markers (e.g. on reset).</summary>

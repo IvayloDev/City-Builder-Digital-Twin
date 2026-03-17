@@ -1,4 +1,6 @@
+using TMPro;
 using UnityEngine;
+using UnityEngine.UI;
 
 namespace CityTwin.Core
 {
@@ -10,6 +12,12 @@ namespace CityTwin.Core
 
         [Tooltip("Population for scoring formulas. Set on prefab or variant (e.g. 60000, 90000).")]
         public int Population = 50000;
+
+        [SerializeField] private TextMeshProUGUI populationText;
+        [SerializeField] private Image safetyFillImage;
+        [SerializeField] private Image economyFillImage;
+        [SerializeField] private Image cultureFillImage;
+        [SerializeField] private Image environmentFillImage;
 
         [Tooltip("Draw gizmo sphere at hub position in editor / debug.")]
         public bool ShowDebugGizmos = true;
@@ -30,6 +38,7 @@ namespace CityTwin.Core
         private void OnValidate()
         {
             if (Population < 0) Population = 0;
+            RefreshPopulationText();
         }
 
         private void OnDrawGizmos()
@@ -43,13 +52,33 @@ namespace CityTwin.Core
 #endif
         }
 
+        /// <summary>Update indicator circles based on per-hub metric scores. Each metric caps at 20 in the simulation, so we treat 20 as "full" (0.25) for the quarter-pie.</summary>
+        public void SetMetricState(float env, float eco, float safety, float culture)
+        {
+            const float maxFill = 0.25f;
+            const float metricCap = 20f; // same as qolCapPerMetric — 20 = full slice
+            if (environmentFillImage != null) environmentFillImage.fillAmount = Mathf.Clamp01(env / metricCap) * maxFill;
+            if (economyFillImage != null) economyFillImage.fillAmount = Mathf.Clamp01(eco / metricCap) * maxFill;
+            if (safetyFillImage != null) safetyFillImage.fillAmount = Mathf.Clamp01(safety / metricCap) * maxFill;
+            if (cultureFillImage != null) cultureFillImage.fillAmount = Mathf.Clamp01(culture / metricCap) * maxFill;
+        }
+
         private void Start()
         {
-            if (VisualRoot != null)
-            {
-                float scale = Mathf.Clamp(Population / 100000f, 0.5f, 2f);
-                VisualRoot.localScale = Vector3.one * scale;
-            }
+            // Start with empty indicator slices; they will be filled when metrics are pushed.
+            const float empty = 0f;
+            if (environmentFillImage != null) environmentFillImage.fillAmount = empty;
+            if (economyFillImage != null) economyFillImage.fillAmount = empty;
+            if (safetyFillImage != null) safetyFillImage.fillAmount = empty;
+            if (cultureFillImage != null) cultureFillImage.fillAmount = empty;
+
+            RefreshPopulationText();
+        }
+
+        private void RefreshPopulationText()
+        {
+            if (populationText != null)
+                populationText.text = $"{Population / 1000}K";
         }
     }
 }

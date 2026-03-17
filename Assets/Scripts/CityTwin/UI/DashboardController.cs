@@ -1,5 +1,6 @@
 using UnityEngine;
 using UnityEngine.UI;
+using TMPro;
 using CityTwin.Core;
 using CityTwin.Simulation;
 
@@ -14,10 +15,10 @@ namespace CityTwin.UI
         [SerializeField] private GameInstanceCoordinator coordinator;
 
         [Header("Top bar")]
-        [SerializeField] private UnityEngine.UI.Text timerText;
-        [SerializeField] private UnityEngine.UI.Text budgetText;
-        [SerializeField] private UnityEngine.UI.Text qolText;
-        [SerializeField] private UnityEngine.UI.Text accessText;
+        [SerializeField] private TextMeshProUGUI timerText;
+        [SerializeField] private TextMeshProUGUI budgetText;
+        [SerializeField] private TextMeshProUGUI qolText;
+        [SerializeField] private TextMeshProUGUI accessText;
 
         [Header("Metric bars (fill 0-1)")]
         [SerializeField] private Image environmentFill;
@@ -26,6 +27,12 @@ namespace CityTwin.UI
         [SerializeField] private Image cultureEduFill;
         [SerializeField] private Image accessibilityFill;
 
+        [Header("Metric percentage texts (optional)")]
+        [SerializeField] private TextMeshProUGUI environmentText;
+        [SerializeField] private TextMeshProUGUI economyText;
+        [SerializeField] private TextMeshProUGUI healthSafetyText;
+        [SerializeField] private TextMeshProUGUI cultureEduText;
+
         [Tooltip("Scale raw metrics to fill (e.g. 0.05 = 1/20).")]
         [SerializeField] private float metricFillScale = 0.05f;
         [Tooltip("Smooth metric bar changes (0 = instant).")]
@@ -33,6 +40,24 @@ namespace CityTwin.UI
 
         private float _displayQol;
         private float _displayEnv, _displayEco, _displaySaf, _displayCul, _displayAcc;
+
+        private void ResetMetricUI()
+        {
+            _displayQol = _displayEnv = _displayEco = _displaySaf = _displayCul = _displayAcc = 0f;
+
+            if (qolText != null) qolText.text = "0";
+            if (accessText != null) accessText.text = "0%";
+            if (environmentText != null) environmentText.text = "0%";
+            if (economyText != null) economyText.text = "0%";
+            if (healthSafetyText != null) healthSafetyText.text = "0%";
+            if (cultureEduText != null) cultureEduText.text = "0%";
+
+            if (environmentFill != null) environmentFill.fillAmount = 0f;
+            if (economyFill != null) economyFill.fillAmount = 0f;
+            if (healthSafetyFill != null) healthSafetyFill.fillAmount = 0f;
+            if (cultureEduFill != null) cultureEduFill.fillAmount = 0f;
+            if (accessibilityFill != null) accessibilityFill.fillAmount = 0f;
+        }
 
         private void Awake()
         {
@@ -43,6 +68,9 @@ namespace CityTwin.UI
 
         private void OnEnable()
         {
+            // Ensure dashboard starts from empty values before any metrics arrive.
+            ResetMetricUI();
+
             if (simulationEngine != null)
                 simulationEngine.OnMetricsChanged += RefreshMetrics;
         }
@@ -73,6 +101,10 @@ namespace CityTwin.UI
             _displayAcc = Mathf.Lerp(_displayAcc, simulationEngine.Accessibility, dt);
             if (qolText != null) qolText.text = Mathf.RoundToInt(_displayQol).ToString();
             if (accessText != null) accessText.text = $"{Mathf.RoundToInt(_displayAcc)}%";
+            if (environmentText != null) environmentText.text = $"{Mathf.RoundToInt(_displayEnv)}%";
+            if (economyText != null) economyText.text = $"{Mathf.RoundToInt(_displayEco)}%";
+            if (healthSafetyText != null) healthSafetyText.text = $"{Mathf.RoundToInt(_displaySaf)}%";
+            if (cultureEduText != null) cultureEduText.text = $"{Mathf.RoundToInt(_displayCul)}%";
             if (environmentFill != null) environmentFill.fillAmount = Mathf.Clamp01(_displayEnv * metricFillScale);
             if (economyFill != null) economyFill.fillAmount = Mathf.Clamp01(_displayEco * metricFillScale);
             if (healthSafetyFill != null) healthSafetyFill.fillAmount = Mathf.Clamp01(_displaySaf * metricFillScale);

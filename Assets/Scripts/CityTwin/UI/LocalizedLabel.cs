@@ -1,19 +1,17 @@
 using UnityEngine;
-using UnityEngine.UI;
 using TMPro;
 using CityTwin.Localization;
 
 namespace CityTwin.UI
 {
-    /// <summary>Sets a UI label from a localization key. Supports both UnityEngine.UI.Text and TextMeshProUGUI (TMP_Text). Assign one of them and a LocalizationService.</summary>
+    /// <summary>Sets a UI label from a localization key. Assign a TextMeshProUGUI (or TMP_Text) and a LocalizationService.</summary>
     public class LocalizedLabel : MonoBehaviour
     {
         [Tooltip("Key in game_config.json localization (e.g. ui.timer, building.park).")]
         [SerializeField] private string localizationKey;
 
-        [Header("Target (assign one)")]
-        [SerializeField] private Text textTarget;
-        [SerializeField] private TMP_Text tmpTarget;
+        [Header("Target")]
+        [SerializeField] private TMP_Text textTarget;
 
         [Header("Services")]
         [SerializeField] private LocalizationService localization;
@@ -21,8 +19,7 @@ namespace CityTwin.UI
         private void Awake()
         {
             if (localization == null) localization = GetComponentInParent<LocalizationService>(true) ?? GetComponentInChildren<LocalizationService>(true);
-            if (textTarget == null) textTarget = GetComponent<Text>();
-            if (tmpTarget == null) tmpTarget = GetComponent<TMP_Text>();
+            if (textTarget == null) textTarget = GetComponent<TMP_Text>();
         }
 
         private void OnEnable()
@@ -36,8 +33,6 @@ namespace CityTwin.UI
             string value = GetLocalizedString();
             if (textTarget != null)
                 textTarget.text = value;
-            if (tmpTarget != null)
-                tmpTarget.text = value;
         }
 
         /// <summary>Change the key at runtime and refresh.</summary>

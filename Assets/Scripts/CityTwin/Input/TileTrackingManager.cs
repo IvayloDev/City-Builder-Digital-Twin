@@ -26,8 +26,8 @@ namespace CityTwin.Input
         public event Action<TilePose> OnTileUpdated;
         public event Action<string> OnTileRemoved;
 
-        private GameInstanceRoot _instanceRoot;
-        private OSCReceiver _receiver;
+        [SerializeField] private GameInstanceRoot _instanceRoot;
+        [SerializeField] private OSCReceiver _receiver;
         private IOSCBind _bind;
         private readonly Dictionary<int, string> _sessionToTileId = new Dictionary<int, string>();
         private HashSet<int> _lastAlive = new HashSet<int>();
@@ -95,7 +95,7 @@ namespace CityTwin.Input
 
             int sourceId = _instanceRoot != null ? _instanceRoot.InstanceId : 0;
             var pose = new TilePose(new Vector2(x, y), angle, buildingId, sourceId, tileId);
-            Debug.Log($"[TileTracking] TUIO set → buildingId={buildingId} pos=({x:F2},{y:F2}) tileId={tileId} (classId={classId})");
+            //Debug.Log($"[TileTracking] TUIO set → buildingId={buildingId} pos=({x:F2},{y:F2}) tileId={tileId} (classId={classId})");
             OnTileUpdated?.Invoke(pose);
         }
 

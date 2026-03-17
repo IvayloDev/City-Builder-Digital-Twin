@@ -98,6 +98,19 @@ namespace CityTwin.Simulation
             return id >= 0 && id < _nodes.Count ? _nodes[id] : default;
         }
 
+        /// <summary>Returns the Id of the transit node nearest to the given world point, or -1 if the graph has no nodes.</summary>
+        public int NearestNodeId(Vector2 point)
+        {
+            int bestId = -1;
+            float bestDist = float.MaxValue;
+            foreach (var n in _nodes)
+            {
+                float d = Vector2.Distance(point, n.Position);
+                if (d < bestDist) { bestDist = d; bestId = n.Id; }
+            }
+            return bestId;
+        }
+
         /// <summary>Distance from point to nearest road segment (edge). Used for HTML-style "connected to road" check.</summary>
         public float DistanceToNearestSegment(Vector2 point)
         {

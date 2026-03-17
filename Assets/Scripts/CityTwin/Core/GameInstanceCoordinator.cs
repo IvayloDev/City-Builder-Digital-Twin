@@ -18,6 +18,8 @@ namespace CityTwin.Core
         [SerializeField] private BuildingSpawner buildingSpawner;
         [Tooltip("Optional. If set and valid, simulation uses prefab-driven hub positions and population instead of config.")]
         [SerializeField] private HubRegistry hubRegistry;
+        [Tooltip("Optional. Draws connection lines between buildings and hubs. Assign or auto-found in children.")]
+        [SerializeField] private HubConnectionRenderer hubConnectionRenderer;
 
         private readonly Dictionary<string, string> _oscToEngineTileId = new Dictionary<string, string>();
 
@@ -34,6 +36,7 @@ namespace CityTwin.Core
 
         private void OnEnable()
         {
+            if (buildingSpawner == null) buildingSpawner = GetComponentInChildren<BuildingSpawner>(true);
             if (configLoader != null && configLoader.Config != null)
             {
                 var cfg = configLoader.Config;
@@ -46,19 +49,26 @@ namespace CityTwin.Core
                     acc.walkingDistance,
                     acc.roadConnectRange,
                     acc.zoneRadius,
-                    acc.defaultConnectionRadius
+                    acc.defaultConnectionRadius,
+                    cfg.Scoring.populationScale
                 );
                 if (cfg.Map != null && cfg.Map.nodes != null && cfg.Map.nodes.Length > 0)
                     BuildTransitGraphFromConfig(cfg.Map);
                 else
                     BuildDefaultTransitGraphIfNeeded();
 
-                if (hubRegistry == null) hubRegistry = FindFirstObjectByType<HubRegistry>();
+                if (hubRegistry == null) hubRegistry = GetComponentInChildren<HubRegistry>(true);
                 if (hubRegistry != null && hubRegistry.IsValid && hubRegistry.Hubs.Count > 0)
                 {
                     var hubs = new List<(Vector2 position, float population)>();
                     foreach (var h in hubRegistry.Hubs)
-                        hubs.Add((h.Position2D, h.Population));
+                    {
+                        Vector2 hubPos = buildingSpawner != null
+                            ? buildingSpawner.WorldToContentLocal(h.transform.position)
+                            : h.Position2D;
+                        hubs.Add((hubPos, h.Population));
+                        //Debug.Log($"[Coordinator] Hub '{h.HubId}' pos in content root local = ({hubPos.x:F1},{hubPos.y:F1}), pop={h.Population}");
+                    }
                     simulationEngine?.SetScoringHubs(hubs);
                 }
             }
@@ -72,7 +82,9 @@ namespace CityTwin.Core
                 tileTracking.OnTileUpdated += OnTileUpdated;
                 tileTracking.OnTileRemoved += OnTileRemoved;
             }
-            if (buildingSpawner == null) buildingSpawner = GetComponentInChildren<BuildingSpawner>(true);
+            if (hubConnectionRenderer == null) hubConnectionRenderer = GetComponentInChildren<HubConnectionRenderer>(true);
+            if (simulationEngine != null)
+                simulationEngine.OnMetricsChanged += PushHubIndicators;
         }
 
         private void OnDisable()
@@ -82,9 +94,11 @@ namespace CityTwin.Core
                 tileTracking.OnTileUpdated -= OnTileUpdated;
                 tileTracking.OnTileRemoved -= OnTileRemoved;
             }
+            if (simulationEngine != null)
+                simulationEngine.OnMetricsChanged -= PushHubIndicators;
         }
 
-        /// <summary>Build transit graph from config map (nodes + edges). Like HTML generateMap / ensureAllNodesConnected.</summary>
+        /// <summary>Build transit graph from config map (nodes + edges). Node positions are treated as content root local space.</summary>
         private void BuildTransitGraphFromConfig(GameConfig.MapData map)
         {
             if (simulationEngine == null || map.nodes == null || map.nodes.Length == 0) return;
@@ -92,7 +106,8 @@ namespace CityTwin.Core
             for (int i = 0; i < map.nodes.Length; i++)
             {
                 var n = map.nodes[i];
-                graph.AddNode(new Vector2(n.x, n.y), n.population > 0 ? n.population : 50000f);
+                Vector2 nodePos = new Vector2(n.x, n.y);
+                graph.AddNode(nodePos, n.population > 0 ? n.population : 50000f);
             }
             if (map.edges != null)
             {
@@ -116,16 +131,16 @@ namespace CityTwin.Core
             }
         }
 
-        /// <summary>Build a simple default hub+road layout when no map config is provided.</summary>
+        /// <summary>Build a simple default hub+road layout when no map config is provided. Uses content root local space (center-origin).</summary>
         private void BuildDefaultTransitGraphIfNeeded()
         {
             if (simulationEngine == null) return;
             var graph = new TransitGraph();
-            float s = 300f;
-            graph.AddNode(new Vector2(s * 0.2f, s * 0.2f), 50000f);
-            graph.AddNode(new Vector2(s * 0.8f, s * 0.2f), 50000f);
-            graph.AddNode(new Vector2(s * 0.8f, s * 0.8f), 50000f);
-            graph.AddNode(new Vector2(s * 0.2f, s * 0.8f), 50000f);
+            float half = 90f;
+            graph.AddNode(new Vector2(-half, -half), 50000f);
+            graph.AddNode(new Vector2( half, -half), 50000f);
+            graph.AddNode(new Vector2( half,  half), 50000f);
+            graph.AddNode(new Vector2(-half,  half), 50000f);
             float len = Vector2.Distance(graph.GetNode(0).Position, graph.GetNode(1).Position);
             graph.AddEdge(0, 1, len);
             graph.AddEdge(1, 2, len);
@@ -143,17 +158,20 @@ namespace CityTwin.Core
         {
             if (simulationEngine == null) { Debug.LogWarning("[Coordinator] simulationEngine is null, skipping."); return; }
 
-            var simPose = new TilePose(pose.Position * tableScale, pose.Rotation, pose.BuildingId, pose.SourceId, pose.TileId);
+            Vector2 simPos = buildingSpawner != null
+                ? buildingSpawner.TuioToLocalPosition(pose.Position)
+                : pose.Position * tableScale;
+            var simPose = new TilePose(simPos, pose.Rotation, pose.BuildingId, pose.SourceId, pose.TileId);
 
             if (_oscToEngineTileId.TryGetValue(pose.TileId, out string engineId))
             {
                 simulationEngine.UpdateTilePosition(engineId, simPose.Position, simPose.Rotation);
                 buildingSpawner?.MoveBuilding(pose, engineId);
-                Debug.Log($"[Coordinator] Move tile {engineId} → simPos=({simPose.Position.x:F0},{simPose.Position.y:F0})");
+                //Debug.Log($"[Coordinator] Move tile {engineId} → simPos=({simPose.Position.x:F0},{simPose.Position.y:F0})");
                 return;
             }
 
-            Debug.Log($"[Coordinator] OnTileUpdated (new) buildingId={pose.BuildingId} budget={Budget}");
+            //Debug.Log($"[Coordinator] OnTileUpdated (new) buildingId={pose.BuildingId} budget={Budget}");
             int price = 0;
             if (configLoader?.Config?.Buildings != null)
             {
@@ -165,7 +183,7 @@ namespace CityTwin.Core
             if (price > 0 && Budget < price) { Debug.Log($"[Coordinator] Not enough budget: need {price}, have {Budget}. Skipping."); return; }
             if (price > 0) Budget -= price;
             engineId = simulationEngine.AddTile(simPose);
-            Debug.Log($"[Coordinator] AddTile returned engineId={engineId ?? "(null)"}");
+            //Debug.Log($"[Coordinator] AddTile returned engineId={engineId ?? "(null)"}");
             if (!string.IsNullOrEmpty(pose.TileId) && !string.IsNullOrEmpty(engineId))
                 _oscToEngineTileId[pose.TileId] = engineId;
             if (buildingSpawner == null) Debug.LogWarning("[Coordinator] buildingSpawner is null, no visual will be spawned.");
@@ -182,7 +200,20 @@ namespace CityTwin.Core
                 buildingSpawner?.RemoveBuilding(engineId);
                 simulationEngine.RemoveTile(engineId);
                 RefundBudgetForBuilding(buildingId);
-                Debug.Log($"[Coordinator] Tile removed oscTileId={oscTileId} engineId={engineId} → refunded; budget now {Budget}");
+                //Debug.Log($"[Coordinator] Tile removed oscTileId={oscTileId} engineId={engineId} → refunded; budget now {Budget}");
+            }
+        }
+
+        private void PushHubIndicators()
+        {
+            if (hubRegistry == null || simulationEngine == null) return;
+            var hubs = hubRegistry.Hubs;
+            var metrics = simulationEngine.HubMetrics;
+            int count = Mathf.Min(hubs.Count, metrics.Count);
+            for (int i = 0; i < count; i++)
+            {
+                var m = metrics[i];
+                hubs[i].SetMetricState(m.Environment, m.Economy, m.HealthSafety, m.CultureEdu);
             }
         }
 

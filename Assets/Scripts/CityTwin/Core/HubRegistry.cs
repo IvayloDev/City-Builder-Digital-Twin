@@ -27,10 +27,10 @@ namespace CityTwin.Core
             _hubs.Clear();
             _validated = false;
 
-            var found = FindObjectsByType<ResidentialHubMono>(FindObjectsSortMode.None);
+            var found = GetComponentsInChildren<ResidentialHubMono>(false);
             foreach (var hub in found)
             {
-                if (hub != null && hub.gameObject.activeInHierarchy)
+                if (hub != null)
                     _hubs.Add(hub);
             }
 

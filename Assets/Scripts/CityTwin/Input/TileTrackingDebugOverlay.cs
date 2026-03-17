@@ -13,8 +13,8 @@ namespace CityTwin.Input
         [Tooltip("Assign a TextMeshProUGUI to show debug stats. If unset, uses one on this GameObject.")]
         [SerializeField] private TextMeshProUGUI debugText;
 
-        private TileTrackingManager _manager;
-        private GameInstanceRoot _root;
+        [SerializeField] private TileTrackingManager _manager;
+        [SerializeField] private GameInstanceRoot _root;
         private int _messageCount;
         private float _lastResetTime;
         private Vector2 _lastPosition;

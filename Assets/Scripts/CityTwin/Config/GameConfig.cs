@@ -82,6 +82,8 @@ namespace CityTwin.Config
         {
             public float qolCapPerMetric = 20f;
             public float epsilonDistance = 0.1f;
+            /// <summary>Divides raw population (e.g. 80000) so the formula produces gradual metric values. Default 1000 → 80000 becomes 80.</summary>
+            public float populationScale = 1000f;
         }
 
         [Serializable]

@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 using UnityEngine;
-using UnityEngine.UI;
+using TMPro;
 using CityTwin.Core;
 using CityTwin.Config;
 using CityTwin.Localization;
@@ -17,9 +17,9 @@ namespace CityTwin.UI
         [SerializeField] private SessionTimer sessionTimer;
         [SerializeField] private SimulationEngine simulationEngine;
         [Header("UI")]
-        [SerializeField] private Text statusBarText;
-        [SerializeField] private Text endTitleText;
-        [SerializeField] private Text endBodyText;
+        [SerializeField] private TextMeshProUGUI statusBarText;
+        [SerializeField] private TextMeshProUGUI endTitleText;
+        [SerializeField] private TextMeshProUGUI endBodyText;
         [SerializeField] private GameObject endPanel;
 
         private int _introKeyIndex;

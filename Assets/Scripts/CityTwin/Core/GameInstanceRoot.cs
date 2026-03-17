@@ -1,3 +1,4 @@
+using extOSC;
 using UnityEngine;
 
 namespace CityTwin.Core
@@ -11,9 +12,15 @@ namespace CityTwin.Core
         [Tooltip("Quadrant/instance index 0-3. Used to identify this instance and select OSC source from config.")]
         [Range(0, 3)]
         [SerializeField] private int instanceId = 0;
+        
+        [SerializeField]
+        private OSCReceiver oscReceiver;
 
         [Tooltip("UDP port this instance listens on for OSC. Use 3333 for TUIO simulator; 9001–9004 for multi-instance.")]
         [SerializeField] private int listenPort = 3333;
+
+        [SerializeField] private string host;
+        
 
         /// <summary>Quadrant/instance index (0-3).</summary>
         public int InstanceId => instanceId;
@@ -25,6 +32,22 @@ namespace CityTwin.Core
         {
             instanceId = Mathf.Clamp(instanceId, 0, 3);
             listenPort = Mathf.Clamp(listenPort, 1, 65535);
+            SetPortAndHost(listenPort, host);
+            
+        }
+
+        void Awake()
+        {
+            SetPortAndHost(listenPort, host);
+        }
+
+        private void SetPortAndHost(int _port, string _host)
+        {
+            if (oscReceiver != null)
+            {
+                oscReceiver.LocalPort = _port;
+                oscReceiver.LocalHost = _host;
+            }
         }
     }
 }
