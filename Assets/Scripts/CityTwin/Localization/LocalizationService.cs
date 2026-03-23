@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using UnityEngine;
 using CityTwin.Config;
@@ -12,6 +13,9 @@ namespace CityTwin.Localization
 
         private Dictionary<string, string> _currentTable;
 
+        /// <summary>Fired when CurrentLanguage is set. Use for LocalizedLabel etc. to refresh.</summary>
+        public event Action OnLanguageChanged;
+
         public string CurrentLanguage
         {
             get => currentLanguage;
@@ -19,6 +23,7 @@ namespace CityTwin.Localization
             {
                 currentLanguage = value ?? "EN";
                 RefreshTable();
+                OnLanguageChanged?.Invoke();
             }
         }
 

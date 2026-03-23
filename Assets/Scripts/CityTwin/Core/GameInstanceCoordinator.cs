@@ -75,7 +75,8 @@ namespace CityTwin.Core
             if (sessionTimer != null && configLoader?.Config != null)
             {
                 sessionTimer.SetFromConfig(configLoader.Config);
-                sessionTimer.StartSession();
+                // Session is started by StartScreenController after language selection.
+                sessionTimer.Stop();
             }
             if (tileTracking != null)
             {

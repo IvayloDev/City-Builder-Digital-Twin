@@ -25,8 +25,8 @@ namespace CityTwin.Simulation
         private float _defaultConnectionRadius = 500f;
         private float _populationScale = 1000f;
 
-        private const float RadiusSmall = 150f;
-        private const float RadiusMedium = 300f;
+        private const float RadiusSmall = 300f;
+        private const float RadiusMedium = 400f;
         private const float RadiusLarge = 500f;
 
         private float _qol;
@@ -227,6 +227,7 @@ namespace CityTwin.Simulation
                     float connectionRadius = GetConnectionRadius(b);
                     var v = b.BaseValues;
 
+                    // One connection per hub in range — a building in range of multiple hubs gets multiple connections
                     for (int i = 0; i < hubCount; i++)
                     {
                         float dist = Vector2.Distance(t.Position, hubPositions[i]);
@@ -251,7 +252,7 @@ namespace CityTwin.Simulation
                 {
                     if (t.Inactive) continue;
                     float distToRoad = _transitGraph.DistanceToNearestSegment(t.Position);
-                    if (distToRoad > _roadConnectRange) continue;
+                    bool roadConnected = distToRoad <= _roadConnectRange;
 
                     var b = GetBuilding(t.BuildingId);
                     if (b == null || b.BaseValues == null) continue;
@@ -259,12 +260,16 @@ namespace CityTwin.Simulation
                     float connectionRadius = GetConnectionRadius(b);
                     var v = b.BaseValues;
 
+                    // One connection per hub in range — a building in range of multiple hubs gets multiple connections
                     for (int i = 0; i < hubCount; i++)
                     {
                         float dist = Vector2.Distance(t.Position, hubPositions[i]);
                         if (dist > connectionRadius) continue;
 
                         _activeConnections.Add(new TileHubConnection { TileId = t.TileId, HubIndex = i });
+
+                        // Legacy scoring requires road connection; visuals (ActiveConnections) do not.
+                        if (!roadConnected) continue;
 
                         float normalizedDist = dist / connectionRadius;
                         float influence = 1f - (normalizedDist * normalizedDist);

@@ -14,8 +14,11 @@ namespace CityTwin.UI
         [SerializeField] private GameObject buildingMarkerPrefab;
 
         [Header("Coordinates")]
-        [Tooltip("TUIO typically sends 0-1. Table size maps that range to local position (e.g. 300,300 to match simulation graph).")]
+        [Tooltip("TUIO typically sends 0-1. Table size maps that range to local position.")]
         [SerializeField] private Vector2 tableSize = new Vector2(300f, 300f);
+
+        [Tooltip("If true and contentRoot is a RectTransform, use contentRoot.rect.size as the mapping size (recommended to keep hubs/buildings in the same space).")]
+        [SerializeField] private bool useContentRootRectSize = true;
 
         [Tooltip("Enable so TUIO bottom (y≈1) appears at bottom of table. TUIO uses top-left origin; Unity UI uses bottom-left.")]
         [SerializeField] private bool flipY = true;
@@ -38,6 +41,25 @@ namespace CityTwin.UI
             return TuioToLocal(pos);
         }
 
+        /// <summary>
+        /// Convert a content/simulation local position back into TUIO-like 0..1 coordinates.
+        /// Useful for debug tools that place in local space but need to reuse Spawn/Move logic.
+        /// </summary>
+        public Vector2 LocalToTuioPosition(Vector2 localPos)
+        {
+            Vector2 size = GetMappingSize();
+            if (size.x <= 0.0001f || size.y <= 0.0001f) return localPos;
+
+            Vector2 pos;
+            if (centerOrigin)
+                pos = new Vector2((localPos.x / size.x) + 0.5f, (localPos.y / size.y) + 0.5f);
+            else
+                pos = new Vector2(localPos.x / size.x, localPos.y / size.y);
+
+            if (flipY) pos.y = 1f - pos.y;
+            return pos;
+        }
+
         /// <summary>Convert any world position to content root local space (2D).</summary>
         public Vector2 WorldToContentLocal(Vector3 worldPos)
         {
@@ -48,11 +70,22 @@ namespace CityTwin.UI
 
         public RectTransform ContentRoot => contentRoot;
 
+        private Vector2 GetMappingSize()
+        {
+            if (useContentRootRectSize && contentRoot != null)
+            {
+                var s = contentRoot.rect.size;
+                if (s.x > 0.0001f && s.y > 0.0001f) return s;
+            }
+            return tableSize;
+        }
+
         private Vector2 TuioToLocal(Vector2 pos)
         {
+            Vector2 size = GetMappingSize();
             if (centerOrigin)
-                return new Vector2((pos.x - 0.5f) * tableSize.x, (pos.y - 0.5f) * tableSize.y);
-            return new Vector2(pos.x * tableSize.x, pos.y * tableSize.y);
+                return new Vector2((pos.x - 0.5f) * size.x, (pos.y - 0.5f) * size.y);
+            return new Vector2(pos.x * size.x, pos.y * size.y);
         }
 
         /// <summary>Spawn a building marker at the tile pose. Call after simulation AddTile.</summary>
@@ -120,7 +153,7 @@ namespace CityTwin.UI
             if (go != null) Destroy(go);
         }
 
-        /// <summary>Get the local-space position of a spawned building marker. Returns false if not found.</summary>
+        /// <summary>Get the local-space position of a spawned building marker (relative to its parent contentRoot). Returns false if not found.</summary>
         public bool TryGetMarkerPosition(string engineTileId, out Vector2 localPos)
         {
             localPos = Vector2.zero;
@@ -130,6 +163,18 @@ namespace CityTwin.UI
                 localPos = rt.anchoredPosition;
             else
                 localPos = new Vector2(go.transform.localPosition.x, go.transform.localPosition.y);
+            return true;
+        }
+
+        /// <summary>Get the marker position in the local space of the given RectTransform. Use this when connection lines are drawn under a different root than contentRoot (e.g. a child Connections panel) so both endpoints use the same coordinate space.</summary>
+        public bool TryGetMarkerPositionIn(string engineTileId, RectTransform inSpace, out Vector2 localPos)
+        {
+            localPos = Vector2.zero;
+            if (string.IsNullOrEmpty(engineTileId) || inSpace == null) return false;
+            if (!_spawned.TryGetValue(engineTileId, out GameObject go) || go == null) return false;
+            Vector3 worldPos = go.transform.position;
+            Vector3 local3d = inSpace.InverseTransformPoint(worldPos);
+            localPos = new Vector2(local3d.x, local3d.y);
             return true;
         }
 

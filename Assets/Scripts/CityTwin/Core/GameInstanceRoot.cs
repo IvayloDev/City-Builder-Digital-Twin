@@ -1,5 +1,6 @@
 using extOSC;
 using UnityEngine;
+using CityTwin.Localization;
 
 namespace CityTwin.Core
 {
@@ -20,13 +21,20 @@ namespace CityTwin.Core
         [SerializeField] private int listenPort = 3333;
 
         [SerializeField] private string host;
-        
+
+        [Tooltip("Per-instance localization. Used by LocalizedLabel and others. Assign on prefab or leave null to resolve from sibling.")]
+        [SerializeField] private LocalizationService localizationService;
 
         /// <summary>Quadrant/instance index (0-3).</summary>
         public int InstanceId => instanceId;
 
         /// <summary>UDP port for this instance's OSC receiver. Any valid port 1024–65535.</summary>
         public int ListenPort => listenPort;
+
+        /// <summary>Per-instance localization for this game instance. Resolved once from sibling if not assigned.</summary>
+        public LocalizationService LocalizationService => _localizationService ??= localizationService != null ? localizationService : GetComponentInChildren<LocalizationService>(true);
+        private LocalizationService _localizationService;
+
 
         private void OnValidate()
         {
@@ -38,6 +46,7 @@ namespace CityTwin.Core
 
         void Awake()
         {
+            _localizationService = localizationService != null ? localizationService : GetComponentInChildren<LocalizationService>(true);
             SetPortAndHost(listenPort, host);
         }
 

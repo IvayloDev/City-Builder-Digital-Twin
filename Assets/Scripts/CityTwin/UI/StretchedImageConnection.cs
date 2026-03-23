@@ -21,8 +21,9 @@ namespace CityTwin.UI
             _rt = GetComponent<RectTransform>();
             _image = GetComponent<Image>();
             _rt.pivot = new Vector2(0f, 0.5f);
-            _rt.anchorMin = Vector2.zero;
-            _rt.anchorMax = Vector2.zero;
+            // Center anchor so anchoredPosition = (from.x, from.y) is in parent local space (matches table with center origin)
+            _rt.anchorMin = new Vector2(0.5f, 0.5f);
+            _rt.anchorMax = new Vector2(0.5f, 0.5f);
         }
 
         public void UpdateEndpoints(Vector2 from, Vector2 to)

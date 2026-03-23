@@ -7,13 +7,14 @@ namespace CityTwin.UI
 {
     /// <summary>
     /// Manages visual connection lines between placed building tiles and the hubs they affect.
+    /// A building in range of multiple hubs gets one line to each such hub.
     /// Uses a pooled prefab with an IConnectionVisual implementation so the visual style
     /// (Image, LineRenderer, particles, etc.) can be swapped by changing the prefab.
     /// </summary>
     public class HubConnectionRenderer : MonoBehaviour
     {
-        [Tooltip("RectTransform that all connection visuals are parented under.")]
-        [SerializeField] private RectTransform contentRoot;
+        [Tooltip("Optional override. Connection lines are always parented and positioned in BuildingSpawner's content root (the table/map) so they align with buildings. Only set this if you have no BuildingSpawner.")]
+        [SerializeField] private RectTransform contentRootOverride;
 
         [Tooltip("Prefab with a MonoBehaviour implementing IConnectionVisual (e.g. StretchedImageConnection).")]
         [SerializeField] private GameObject connectionPrefab;
@@ -31,6 +32,7 @@ namespace CityTwin.UI
         {
             if (simulationEngine != null)
                 simulationEngine.OnMetricsChanged += Refresh;
+                
         }
 
         private void OnDisable()
@@ -44,23 +46,35 @@ namespace CityTwin.UI
             if (simulationEngine == null || hubRegistry == null || buildingSpawner == null || connectionPrefab == null)
                 return;
 
+            // Always use the table (BuildingSpawner's root) so lines draw on the map with the buildings
+            RectTransform root = buildingSpawner.ContentRoot != null ? buildingSpawner.ContentRoot : contentRootOverride;
+            if (root == null)
+                return;
+
             var connections = simulationEngine.ActiveConnections;
             var hubs = hubRegistry.Hubs;
 
             _currentKeys.Clear();
+            bool useTableSpace = (root == buildingSpawner.ContentRoot);
+
             for (int i = 0; i < connections.Count; i++)
             {
                 var c = connections[i];
                 if (c.HubIndex < 0 || c.HubIndex >= hubs.Count) continue;
-                if (!buildingSpawner.TryGetMarkerPosition(c.TileId, out Vector2 buildingPos)) continue;
 
-                Vector2 hubPos = GetHubLocalPosition(hubs[c.HubIndex]);
+                Vector2 buildingPos;
+                bool gotBuilding = useTableSpace
+                    ? buildingSpawner.TryGetMarkerPosition(c.TileId, out buildingPos)
+                    : buildingSpawner.TryGetMarkerPositionIn(c.TileId, root, out buildingPos);
+                if (!gotBuilding) continue;
+
+                Vector2 hubPos = GetHubLocalPosition(hubs[c.HubIndex], root);
                 var key = (c.TileId, c.HubIndex);
                 _currentKeys.Add(key);
 
                 if (!_active.TryGetValue(key, out IConnectionVisual visual))
                 {
-                    visual = Acquire();
+                    visual = Acquire(root);
                     _active[key] = visual;
                 }
 
@@ -83,7 +97,7 @@ namespace CityTwin.UI
                 _active.Remove(toRemove[i]);
         }
 
-        private IConnectionVisual Acquire()
+        private IConnectionVisual Acquire(RectTransform root)
         {
             for (int i = _pool.Count - 1; i >= 0; i--)
             {
@@ -91,12 +105,14 @@ namespace CityTwin.UI
                 if (v != null)
                 {
                     _pool.RemoveAt(i);
+                    if (v is MonoBehaviour mb && mb.transform.parent != root)
+                        mb.transform.SetParent(root, false);
                     return v;
                 }
                 _pool.RemoveAt(i);
             }
 
-            var go = Instantiate(connectionPrefab, contentRoot);
+            var go = Instantiate(connectionPrefab, root);
             var visual = go.GetComponent<IConnectionVisual>();
             if (visual == null)
             {
@@ -107,18 +123,11 @@ namespace CityTwin.UI
             return visual;
         }
 
-        private Vector2 GetHubLocalPosition(ResidentialHubMono hub)
+        /// <summary>Hub position in the given root's local space (same space as building markers). Uses transform hierarchy only.</summary>
+        private Vector2 GetHubLocalPosition(ResidentialHubMono hub, RectTransform root)
         {
-            if (contentRoot == null) return Vector2.zero;
-            if (hub.transform is RectTransform hubRt)
-            {
-                Vector3 worldPos = hubRt.position;
-                Vector2 localPos;
-                RectTransformUtility.ScreenPointToLocalPointInRectangle(
-                    contentRoot, RectTransformUtility.WorldToScreenPoint(null, worldPos), null, out localPos);
-                return localPos;
-            }
-            Vector3 local3d = contentRoot.InverseTransformPoint(hub.transform.position);
+            if (root == null) return Vector2.zero;
+            Vector3 local3d = root.InverseTransformPoint(hub.transform.position);
             return new Vector2(local3d.x, local3d.y);
         }
 

@@ -1,52 +1,66 @@
 using UnityEngine;
+using UnityEngine.UI;
 using TMPro;
+using CityTwin.Core;
 using CityTwin.Localization;
 
 namespace CityTwin.UI
 {
-    /// <summary>Sets a UI label from a localization key. Assign a TextMeshProUGUI (or TMP_Text) and a LocalizationService.</summary>
+    /// <summary>
+    /// Attach to a button or any GameObject with text. Shows the localized string for
+    /// <see cref="localizationKey"/> using the currently chosen language and refreshes
+    /// when language changes. Resolves LocalizationService from GameInstanceRoot (one parent walk).
+    /// </summary>
+    [DisallowMultipleComponent]
     public class LocalizedLabel : MonoBehaviour
     {
-        [Tooltip("Key in game_config.json localization (e.g. ui.timer, building.park).")]
+        [SerializeField] private LocalizationService localization;
+        [Tooltip("Key in your localization table (e.g. start.english, ui.timer).")]
         [SerializeField] private string localizationKey;
 
-        [Header("Target")]
-        [SerializeField] private TMP_Text textTarget;
-
-        [Header("Services")]
-        [SerializeField] private LocalizationService localization;
+        [Header("Target (optional)")]
+        [Tooltip("If set, this text is updated. Otherwise uses TextMeshProUGUI or Text on this GameObject.")]
+        [SerializeField] private TextMeshProUGUI targetTmp;
 
         private void Awake()
         {
-            if (localization == null) localization = GetComponentInParent<LocalizationService>(true) ?? GetComponentInChildren<LocalizationService>(true);
-            if (textTarget == null) textTarget = GetComponent<TMP_Text>();
+            if (localization == null)
+            {
+                var root = GetComponentInParent<GameInstanceRoot>(true);
+                if (root != null)
+                    localization = root.LocalizationService;
+            }
         }
 
         private void OnEnable()
         {
+            if (localization != null)
+                localization.OnLanguageChanged += Refresh;
             Refresh();
         }
 
-        /// <summary>Apply current language string to the assigned text target. Call when language changes.</summary>
-        public void Refresh()
+        private void OnDisable()
         {
-            string value = GetLocalizedString();
-            if (textTarget != null)
-                textTarget.text = value;
+            if (localization != null)
+                localization.OnLanguageChanged -= Refresh;
         }
 
-        /// <summary>Change the key at runtime and refresh.</summary>
+        /// <summary>Set the key and refresh (e.g. from code).</summary>
         public void SetKey(string key)
         {
             localizationKey = key ?? "";
             Refresh();
         }
 
-        private string GetLocalizedString()
+        /// <summary>Apply the current language string to the target text.</summary>
+        public void Refresh()
         {
-            if (string.IsNullOrEmpty(localizationKey)) return "";
-            if (localization != null) return localization.GetString(localizationKey);
-            return localizationKey;
+            string text = localization != null && !string.IsNullOrEmpty(localizationKey)
+                ? localization.GetString(localizationKey)
+                : localizationKey;
+
+            if (targetTmp != null)
+                targetTmp.text = text;
         }
     }
 }
