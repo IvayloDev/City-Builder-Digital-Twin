@@ -60,12 +60,15 @@ namespace CityTwin.UI
             return pos;
         }
 
-        /// <summary>Convert any world position to content root local space (2D).</summary>
+        /// <summary>Convert any world position to the center-anchored coordinate space used by
+        /// TuioToLocal and building markers (0,0 = center of contentRoot rect).
+        /// Accounts for contentRoot pivot so results are consistent regardless of pivot setting.</summary>
         public Vector2 WorldToContentLocal(Vector3 worldPos)
         {
             if (contentRoot == null) return new Vector2(worldPos.x, worldPos.y);
             Vector3 local = contentRoot.InverseTransformPoint(worldPos);
-            return new Vector2(local.x, local.y);
+            Vector2 pivotCorrection = (new Vector2(0.5f, 0.5f) - contentRoot.pivot) * contentRoot.rect.size;
+            return new Vector2(local.x, local.y) - pivotCorrection;
         }
 
         public RectTransform ContentRoot => contentRoot;
@@ -166,7 +169,8 @@ namespace CityTwin.UI
             return true;
         }
 
-        /// <summary>Get the marker position in the local space of the given RectTransform. Use this when connection lines are drawn under a different root than contentRoot (e.g. a child Connections panel) so both endpoints use the same coordinate space.</summary>
+        /// <summary>Get the marker position in the center-anchored space of the given RectTransform.
+        /// Corrects for pivot so (0,0) = center of inSpace rect, consistent with TuioToLocal.</summary>
         public bool TryGetMarkerPositionIn(string engineTileId, RectTransform inSpace, out Vector2 localPos)
         {
             localPos = Vector2.zero;
@@ -174,7 +178,8 @@ namespace CityTwin.UI
             if (!_spawned.TryGetValue(engineTileId, out GameObject go) || go == null) return false;
             Vector3 worldPos = go.transform.position;
             Vector3 local3d = inSpace.InverseTransformPoint(worldPos);
-            localPos = new Vector2(local3d.x, local3d.y);
+            Vector2 pivotCorrection = (new Vector2(0.5f, 0.5f) - inSpace.pivot) * inSpace.rect.size;
+            localPos = new Vector2(local3d.x, local3d.y) - pivotCorrection;
             return true;
         }
 

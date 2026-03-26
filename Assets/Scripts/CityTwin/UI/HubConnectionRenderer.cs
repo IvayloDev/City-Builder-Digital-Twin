@@ -123,12 +123,14 @@ namespace CityTwin.UI
             return visual;
         }
 
-        /// <summary>Hub position in the given root's local space (same space as building markers). Uses transform hierarchy only.</summary>
+        /// <summary>Hub position in the center-anchored space of root (same space as building markers).
+        /// Corrects for root pivot so (0,0) = center of root rect, matching TuioToLocal and marker anchoredPositions.</summary>
         private Vector2 GetHubLocalPosition(ResidentialHubMono hub, RectTransform root)
         {
             if (root == null) return Vector2.zero;
             Vector3 local3d = root.InverseTransformPoint(hub.transform.position);
-            return new Vector2(local3d.x, local3d.y);
+            Vector2 pivotCorrection = (new Vector2(0.5f, 0.5f) - root.pivot) * root.rect.size;
+            return new Vector2(local3d.x, local3d.y) - pivotCorrection;
         }
 
         /// <summary>Remove all visuals and return them to pool. Call on reset.</summary>

@@ -1,12 +1,14 @@
 using extOSC;
 using UnityEngine;
 using CityTwin.Localization;
+using CityTwin.Config;
 
 namespace CityTwin.Core
 {
     /// <summary>
     /// Root component for the master game instance prefab. Each copy of the prefab represents one game instance.
-    /// Set InstanceId (0-3) and ListenPort (e.g. 3333 for TUIO simulator, 9001-9004 for multi-instance) per copy. No statics.
+    /// Set InstanceId (0-3) and ListenPort (e.g. 3333 for TUIO simulator, 9001-9004 for multi-instance) per copy.
+    /// Call ApplyOscConfig to override port/host from game_config.json at runtime. No statics.
     /// </summary>
     public class GameInstanceRoot : MonoBehaviour
     {
@@ -17,7 +19,7 @@ namespace CityTwin.Core
         [SerializeField]
         private OSCReceiver oscReceiver;
 
-        [Tooltip("UDP port this instance listens on for OSC. Use 3333 for TUIO simulator; 9001–9004 for multi-instance.")]
+        [Tooltip("UDP port this instance listens on for OSC. Use 3333 for TUIO simulator; 9001–9004 for multi-instance. Overridden at runtime if game_config.json has a matching OSC source.")]
         [SerializeField] private int listenPort = 3333;
 
         [SerializeField] private string host;
@@ -50,12 +52,34 @@ namespace CityTwin.Core
             SetPortAndHost(listenPort, host);
         }
 
+        /// <summary>Apply OSC source from game_config.json. Matches by instanceId index into osc.sources[].
+        /// Call after config is loaded (e.g. from GameInstanceCoordinator.OnEnable).</summary>
+        public void ApplyOscConfig(GameConfig config)
+        {
+            if (config?.Osc?.sources == null || config.Osc.sources.Length == 0) return;
+            if (instanceId < 0 || instanceId >= config.Osc.sources.Length)
+            {
+                Debug.LogWarning($"[GameInstanceRoot] instanceId {instanceId} out of range for osc.sources (length={config.Osc.sources.Length}). Keeping inspector values.");
+                return;
+            }
+
+            var source = config.Osc.sources[instanceId];
+            if (source.listenPort > 0)
+                listenPort = Mathf.Clamp(source.listenPort, 1024, 65535);
+            if (!string.IsNullOrEmpty(source.expectedSenderIp))
+                host = source.expectedSenderIp;
+
+            SetPortAndHost(listenPort, host);
+            Debug.Log($"[GameInstanceRoot] Instance {instanceId} ({source.id}): port={listenPort}, host={host}");
+        }
+
         private void SetPortAndHost(int _port, string _host)
         {
             if (oscReceiver != null)
             {
                 oscReceiver.LocalPort = _port;
                 oscReceiver.LocalHost = _host;
+                Debug.Log($"[GameInstanceRoot] OSC receiver set → port={_port}, host={_host}");
             }
         }
     }

@@ -16,6 +16,7 @@ namespace CityTwin.Core
         [SerializeField] private GameConfigLoader configLoader;
         [SerializeField] private SessionTimer sessionTimer;
         [SerializeField] private BuildingSpawner buildingSpawner;
+        [SerializeField] private GameInstanceRoot gameInstanceRoot;
         [Tooltip("Optional. If set and valid, simulation uses prefab-driven hub positions and population instead of config.")]
         [SerializeField] private HubRegistry hubRegistry;
         [Tooltip("Optional. Draws connection lines between buildings and hubs. Assign or auto-found in children.")]
@@ -28,9 +29,14 @@ namespace CityTwin.Core
 
         private void Awake()
         {
+            if (gameInstanceRoot == null) gameInstanceRoot = GetComponentInParent<GameInstanceRoot>(true) ?? GetComponent<GameInstanceRoot>();
+            if (configLoader == null) configLoader = GetComponentInChildren<GameConfigLoader>(true);
+
+            if (gameInstanceRoot != null && configLoader?.Config != null)
+                gameInstanceRoot.ApplyOscConfig(configLoader.Config);
+
             if (simulationEngine == null) simulationEngine = GetComponentInChildren<SimulationEngine>(true);
             if (tileTracking == null) tileTracking = GetComponent<TileTrackingManager>();
-            if (configLoader == null) configLoader = GetComponentInChildren<GameConfigLoader>(true);
             if (sessionTimer == null) sessionTimer = GetComponentInChildren<SessionTimer>(true);
         }
 
@@ -75,7 +81,6 @@ namespace CityTwin.Core
             if (sessionTimer != null && configLoader?.Config != null)
             {
                 sessionTimer.SetFromConfig(configLoader.Config);
-                // Session is started by StartScreenController after language selection.
                 sessionTimer.Stop();
             }
             if (tileTracking != null)
