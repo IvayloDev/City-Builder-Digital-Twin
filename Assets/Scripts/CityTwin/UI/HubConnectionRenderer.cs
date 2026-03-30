@@ -1,12 +1,14 @@
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.UI;
 using CityTwin.Core;
 using CityTwin.Simulation;
 
 namespace CityTwin.UI
 {
     /// <summary>
-    /// Manages visual connection lines between placed building tiles and the hubs they affect.
+    /// Manages visual connection lines between placed building tiles and the hubs they affect,
+    /// and optional hub-to-hub links.
     /// A building in range of multiple hubs gets one line to each such hub.
     /// Uses a pooled prefab with an IConnectionVisual implementation so the visual style
     /// (Image, LineRenderer, particles, etc.) can be swapped by changing the prefab.
@@ -23,16 +25,28 @@ namespace CityTwin.UI
         [SerializeField] private BuildingSpawner buildingSpawner;
         [SerializeField] private SimulationEngine simulationEngine;
 
-        private readonly Dictionary<(string tileId, int hubIndex), IConnectionVisual> _active =
+        [Header("Building -> Hub")]
+        [SerializeField] private bool useBuildingHubColorOverride = false;
+        [SerializeField] private Color buildingHubColor = Color.white;
+
+        [Header("Hub -> Hub")]
+        [SerializeField] private bool drawHubToHubConnections = true;
+        [SerializeField] private bool useHubToHubColorOverride = true;
+        [SerializeField] private Color hubToHubColor = new Color(0.5f, 0.85f, 1f, 0.7f);
+
+        private readonly Dictionary<(string tileId, int hubIndex), IConnectionVisual> _activeBuildingHub =
             new Dictionary<(string, int), IConnectionVisual>();
+        private readonly Dictionary<(int hubA, int hubB), IConnectionVisual> _activeHubHub =
+            new Dictionary<(int, int), IConnectionVisual>();
         private readonly List<IConnectionVisual> _pool = new List<IConnectionVisual>();
-        private readonly HashSet<(string, int)> _currentKeys = new HashSet<(string, int)>();
+        private readonly HashSet<(string, int)> _currentBuildingHubKeys = new HashSet<(string, int)>();
+        private readonly HashSet<(int, int)> _currentHubHubKeys = new HashSet<(int, int)>();
 
         private void OnEnable()
         {
             if (simulationEngine != null)
                 simulationEngine.OnMetricsChanged += Refresh;
-                
+            Refresh();
         }
 
         private void OnDisable()
@@ -54,7 +68,8 @@ namespace CityTwin.UI
             var connections = simulationEngine.ActiveConnections;
             var hubs = hubRegistry.Hubs;
 
-            _currentKeys.Clear();
+            _currentBuildingHubKeys.Clear();
+            _currentHubHubKeys.Clear();
             bool useTableSpace = (root == buildingSpawner.ContentRoot);
 
             for (int i = 0; i < connections.Count; i++)
@@ -70,23 +85,52 @@ namespace CityTwin.UI
 
                 Vector2 hubPos = GetHubLocalPosition(hubs[c.HubIndex], root);
                 var key = (c.TileId, c.HubIndex);
-                _currentKeys.Add(key);
+                _currentBuildingHubKeys.Add(key);
 
-                if (!_active.TryGetValue(key, out IConnectionVisual visual))
+                if (!_activeBuildingHub.TryGetValue(key, out IConnectionVisual visual))
                 {
                     visual = Acquire(root);
-                    _active[key] = visual;
+                    if (visual == null) continue;
+                    _activeBuildingHub[key] = visual;
                 }
 
                 visual.UpdateEndpoints(buildingPos, hubPos);
+                if (useBuildingHubColorOverride)
+                    ApplyColor(visual, buildingHubColor);
                 visual.SetActive(true);
             }
 
-            // Deactivate visuals no longer needed
-            var toRemove = new List<(string, int)>();
-            foreach (var kv in _active)
+            if (drawHubToHubConnections && hubs.Count >= 2)
             {
-                if (!_currentKeys.Contains(kv.Key))
+                for (int i = 0; i < hubs.Count - 1; i++)
+                {
+                    Vector2 a = GetHubLocalPosition(hubs[i], root);
+                    for (int j = i + 1; j < hubs.Count; j++)
+                    {
+                        Vector2 b = GetHubLocalPosition(hubs[j], root);
+                        var key = (i, j);
+                        _currentHubHubKeys.Add(key);
+
+                        if (!_activeHubHub.TryGetValue(key, out IConnectionVisual visual))
+                        {
+                            visual = Acquire(root);
+                            if (visual == null) continue;
+                            _activeHubHub[key] = visual;
+                        }
+
+                        visual.UpdateEndpoints(a, b);
+                        if (useHubToHubColorOverride)
+                            ApplyColor(visual, hubToHubColor);
+                        visual.SetActive(true);
+                    }
+                }
+            }
+
+            // Deactivate visuals no longer needed (building -> hub)
+            var toRemove = new List<(string, int)>();
+            foreach (var kv in _activeBuildingHub)
+            {
+                if (!_currentBuildingHubKeys.Contains(kv.Key))
                 {
                     kv.Value.SetActive(false);
                     _pool.Add(kv.Value);
@@ -94,7 +138,21 @@ namespace CityTwin.UI
                 }
             }
             for (int i = 0; i < toRemove.Count; i++)
-                _active.Remove(toRemove[i]);
+                _activeBuildingHub.Remove(toRemove[i]);
+
+            // Deactivate visuals no longer needed (hub -> hub)
+            var toRemoveHubHub = new List<(int, int)>();
+            foreach (var kv in _activeHubHub)
+            {
+                if (!_currentHubHubKeys.Contains(kv.Key))
+                {
+                    kv.Value.SetActive(false);
+                    _pool.Add(kv.Value);
+                    toRemoveHubHub.Add(kv.Key);
+                }
+            }
+            for (int i = 0; i < toRemoveHubHub.Count; i++)
+                _activeHubHub.Remove(toRemoveHubHub[i]);
         }
 
         private IConnectionVisual Acquire(RectTransform root)
@@ -123,6 +181,13 @@ namespace CityTwin.UI
             return visual;
         }
 
+        private static void ApplyColor(IConnectionVisual visual, Color color)
+        {
+            if (!(visual is MonoBehaviour mb) || mb == null) return;
+            var graphic = mb.GetComponent<Graphic>();
+            if (graphic != null) graphic.color = color;
+        }
+
         /// <summary>Hub position in the center-anchored space of root (same space as building markers).
         /// Corrects for root pivot so (0,0) = center of root rect, matching TuioToLocal and marker anchoredPositions.</summary>
         private Vector2 GetHubLocalPosition(ResidentialHubMono hub, RectTransform root)
@@ -136,7 +201,7 @@ namespace CityTwin.UI
         /// <summary>Remove all visuals and return them to pool. Call on reset.</summary>
         public void ClearAll()
         {
-            foreach (var kv in _active)
+            foreach (var kv in _activeBuildingHub)
             {
                 if (kv.Value != null)
                 {
@@ -144,7 +209,17 @@ namespace CityTwin.UI
                     _pool.Add(kv.Value);
                 }
             }
-            _active.Clear();
+            _activeBuildingHub.Clear();
+
+            foreach (var kv in _activeHubHub)
+            {
+                if (kv.Value != null)
+                {
+                    kv.Value.SetActive(false);
+                    _pool.Add(kv.Value);
+                }
+            }
+            _activeHubHub.Clear();
         }
     }
 }

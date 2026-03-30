@@ -63,20 +63,7 @@ namespace CityTwin.Core
                 else
                     BuildDefaultTransitGraphIfNeeded();
 
-                if (hubRegistry == null) hubRegistry = GetComponentInChildren<HubRegistry>(true);
-                if (hubRegistry != null && hubRegistry.IsValid && hubRegistry.Hubs.Count > 0)
-                {
-                    var hubs = new List<(Vector2 position, float population)>();
-                    foreach (var h in hubRegistry.Hubs)
-                    {
-                        Vector2 hubPos = buildingSpawner != null
-                            ? buildingSpawner.WorldToContentLocal(h.transform.position)
-                            : h.Position2D;
-                        hubs.Add((hubPos, h.Population));
-                        //Debug.Log($"[Coordinator] Hub '{h.HubId}' pos in content root local = ({hubPos.x:F1},{hubPos.y:F1}), pop={h.Population}");
-                    }
-                    simulationEngine?.SetScoringHubs(hubs);
-                }
+                ApplyRegistryHubsToSimulation();
             }
             if (sessionTimer != null && configLoader?.Config != null)
             {
@@ -93,6 +80,13 @@ namespace CityTwin.Core
                 simulationEngine.OnMetricsChanged += PushHubIndicators;
         }
 
+        private void Start()
+        {
+            // Run once after all Awake/OnEnable calls so hub/content references are stable.
+            ApplyRegistryHubsToSimulation();
+            simulationEngine?.RecalculateMetrics();
+        }
+
         private void OnDisable()
         {
             if (tileTracking != null)
@@ -102,6 +96,61 @@ namespace CityTwin.Core
             }
             if (simulationEngine != null)
                 simulationEngine.OnMetricsChanged -= PushHubIndicators;
+        }
+
+        /// <summary>
+        /// Process a tile update through the same path used by OSC/TUIO.
+        /// Returns true only when the tile is tracked by the coordinator after processing
+        /// (e.g. placement succeeded and budget allowed, or an existing tile was updated).
+        /// </summary>
+        public bool TryProcessTileUpdate(TilePose pose, out string engineTileId)
+        {
+            engineTileId = null;
+            if (string.IsNullOrEmpty(pose.TileId))
+                return false;
+
+            OnTileUpdated(pose);
+            return _oscToEngineTileId.TryGetValue(pose.TileId, out engineTileId);
+        }
+
+        /// <summary>
+        /// Remove a tracked tile through the same path used by OSC/TUIO alive messages.
+        /// Returns true when a tracked tile id existed and was removed.
+        /// </summary>
+        public bool TryProcessTileRemoval(string tileId)
+        {
+            if (string.IsNullOrEmpty(tileId))
+                return false;
+            bool existed = _oscToEngineTileId.ContainsKey(tileId);
+            if (!existed)
+                return false;
+
+            OnTileRemoved(tileId);
+            return true;
+        }
+
+        private void ApplyRegistryHubsToSimulation()
+        {
+            if (simulationEngine == null) return;
+            if (hubRegistry == null) hubRegistry = GetComponentInChildren<HubRegistry>(true);
+            if (hubRegistry == null) return;
+
+            // Refresh explicitly to avoid script execution order races on scene load.
+            hubRegistry.FetchHubs();
+
+            var hubs = new List<(Vector2 position, float population)>();
+            if (hubRegistry.IsValid && hubRegistry.Hubs.Count > 0)
+            {
+                foreach (var h in hubRegistry.Hubs)
+                {
+                    Vector2 hubPos = buildingSpawner != null
+                        ? buildingSpawner.WorldToContentLocal(h.transform.position)
+                        : h.Position2D;
+                    hubs.Add((hubPos, h.Population));
+                }
+            }
+
+            simulationEngine.SetScoringHubs(hubs);
         }
 
         /// <summary>Build transit graph from config map (nodes + edges). Node positions are treated as content root local space.</summary>

@@ -41,13 +41,13 @@ Material:
         m_Offset: {x: 0, y: 0}
     m_Ints: []
     m_Floats:
-    - _AngleEnd: 315
-    - _AngleStart: 225
+    - _AngleEnd: 316
+    - _AngleStart: 224
     - _ColorMask: 15
     - _EnableExternalAlpha: 0
-    - _Feather: 0.005
-    - _InnerRadius: 0.386
-    - _OuterRadius: 0.93
+    - _Feather: 0
+    - _InnerRadius: 0.39
+    - _OuterRadius: 0.919
     - _Rotation: 0
     - _Stencil: 0
     - _StencilComp: 8
