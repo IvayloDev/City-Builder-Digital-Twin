@@ -18,6 +18,8 @@
     "com.unity.test-framework": "1.6.0",
     "com.unity.timeline": "1.8.10",
     "com.unity.ugui": "2.0.0",
+    "com.unity.uiextensions": "https://github.com/Unity-UI-Extensions/com.unity.uiextensions.git",
+    "com.unity.vectorgraphics": "3.0.0-preview.7",
     "com.unity.visualscripting": "1.9.9",
     "jp.keijiro.klak.ndi": "2.1.6",
     "com.unity.modules.accessibility": "1.0.0",

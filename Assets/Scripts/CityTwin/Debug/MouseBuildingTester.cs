@@ -15,13 +15,14 @@ using CityTwin.UI;
 /// - Left-click on the table area to spawn that building.
 /// - Drag with left mouse to move an existing building.
 ///
-/// This bypasses OSC/TUIO and talks directly to SimulationEngine + a marker prefab,
-/// so you can quickly test metric behaviour in the Unity editor.
+/// This emulates OSC/TUIO updates through GameInstanceCoordinator so budget and
+/// placement/removal logic match physical marker behavior in the Unity editor.
 /// </summary>
 public class MouseBuildingTester : MonoBehaviour
 {
     [Header("References")]
     [SerializeField] private SimulationEngine simulationEngine;
+    [SerializeField] private GameInstanceCoordinator coordinator;
     [SerializeField] private GameConfigLoader configLoader;
     [SerializeField] private LocalizationService localization;
     [SerializeField] private BuildingSpawner buildingSpawner;
@@ -44,6 +45,7 @@ public class MouseBuildingTester : MonoBehaviour
 
     private class ActiveTile
     {
+        public string DebugTileId;
         public string EngineId;
         public RectTransform Marker;
         public string BuildingId;
@@ -53,6 +55,7 @@ public class MouseBuildingTester : MonoBehaviour
     private ActiveTile _dragging;
     private Vector2 _dragOffset;
     private string _currentBuildingId;
+    private int _nextDebugTileId;
 
     private bool _pickerOpen;
     private Vector2 _pickerScroll;
@@ -61,6 +64,8 @@ public class MouseBuildingTester : MonoBehaviour
     private void Awake()
     {
         if (simulationEngine == null) simulationEngine = GetComponentInChildren<SimulationEngine>(true);
+        if (coordinator == null) coordinator = GetComponentInChildren<GameInstanceCoordinator>(true);
+        if (coordinator == null) coordinator = GetComponentInParent<GameInstanceCoordinator>(true);
         if (configLoader == null) configLoader = GetComponentInChildren<GameConfigLoader>(true);
         if (localization == null) localization = GetComponentInChildren<LocalizationService>(true);
         if (buildingSpawner == null) buildingSpawner = GetComponentInChildren<BuildingSpawner>(true);
@@ -118,7 +123,11 @@ public class MouseBuildingTester : MonoBehaviour
                     if (deleteMode)
                 {
                         // Remove from simulation and destroy marker when ESC is held.
-                        if (!string.IsNullOrEmpty(tile.EngineId))
+                        if (coordinator != null && !string.IsNullOrEmpty(tile.DebugTileId))
+                        {
+                            coordinator.TryProcessTileRemoval(tile.DebugTileId);
+                        }
+                        else if (!string.IsNullOrEmpty(tile.EngineId))
                         {
                             simulationEngine.RemoveTile(tile.EngineId);
                             buildingSpawner?.RemoveBuilding(tile.EngineId);
@@ -149,20 +158,36 @@ public class MouseBuildingTester : MonoBehaviour
                 tableArea, screenPos, uiCamera, out var spawnLocal))
             return;
 
-        // Simulation tile: simulation space matches tableArea local space.
-        var simPose = new TilePose(spawnLocal, 0f, _currentBuildingId, 0, null);
-        string engineId = simulationEngine.AddTile(simPose);
-        if (string.IsNullOrEmpty(engineId)) return;
+        string engineId = null;
+        string debugTileId = $"debug_mouse_{_nextDebugTileId++}";
+        bool useCoordinatorPath = coordinator != null && buildingSpawner != null;
+        if (useCoordinatorPath)
+        {
+            Vector2 tuioPos = buildingSpawner.LocalToTuioPosition(spawnLocal);
+            var debugPose = new TilePose(tuioPos, 0f, _currentBuildingId, 0, debugTileId);
+            bool placed = coordinator.TryProcessTileUpdate(debugPose, out engineId);
+            if (!placed || string.IsNullOrEmpty(engineId))
+                return;
+        }
+        else
+        {
+            // Fallback direct simulation path for scenes without coordinator/building spawner.
+            var simPose = new TilePose(spawnLocal, 0f, _currentBuildingId, 0, null);
+            engineId = simulationEngine.AddTile(simPose);
+            if (string.IsNullOrEmpty(engineId)) return;
+        }
 
-        // If we have a BuildingSpawner, spawn the marker through it so HubConnectionRenderer can find endpoints.
+        // Resolve marker created by coordinator/spawner (instance name = "{BuildingId}_{engineTileId}").
         RectTransform rt = null;
         if (buildingSpawner != null && buildingSpawner.ContentRoot != null)
         {
-            Vector2 tuioPos = buildingSpawner.LocalToTuioPosition(spawnLocal);
-            var spawnerPose = new TilePose(tuioPos, 0f, _currentBuildingId, 0, null);
-            buildingSpawner.SpawnBuilding(spawnerPose, engineId);
+            if (!useCoordinatorPath)
+            {
+                Vector2 tuioPos = buildingSpawner.LocalToTuioPosition(spawnLocal);
+                var spawnerPose = new TilePose(tuioPos, 0f, _currentBuildingId, 0, null);
+                buildingSpawner.SpawnBuilding(spawnerPose, engineId);
+            }
 
-            // SpawnBuilding names its instance: "{BuildingId}_{engineTileId}".
             string instanceName = $"{_currentBuildingId}_{engineId}";
             rt = buildingSpawner.ContentRoot.Find(instanceName) as RectTransform;
             if (rt == null)
@@ -183,6 +208,7 @@ public class MouseBuildingTester : MonoBehaviour
 
         var active = new ActiveTile
         {
+            DebugTileId = debugTileId,
             EngineId = engineId,
             Marker = rt,
             BuildingId = _currentBuildingId
@@ -194,7 +220,7 @@ public class MouseBuildingTester : MonoBehaviour
 
     private void OnMouseDrag(Vector2 screenPos)
     {
-        if (_dragging == null || _dragging.Marker == null || simulationEngine == null || tableArea == null)
+        if (_dragging == null || simulationEngine == null || tableArea == null)
             return;
 
         if (!RectTransformUtility.ScreenPointToLocalPointInRectangle(
@@ -202,18 +228,28 @@ public class MouseBuildingTester : MonoBehaviour
             return;
 
         Vector2 targetLocal = local + _dragOffset;
-        simulationEngine.UpdateTilePosition(_dragging.EngineId, targetLocal, 0f);
-
-        // Keep marker in sync (when using BuildingSpawner we must move via it because it owns the registered marker).
-        if (buildingSpawner != null)
+        bool useCoordinatorPath = coordinator != null && buildingSpawner != null && !string.IsNullOrEmpty(_dragging.DebugTileId);
+        if (useCoordinatorPath)
         {
             Vector2 tuioPos = buildingSpawner.LocalToTuioPosition(targetLocal);
-            var spawnerPose = new TilePose(tuioPos, 0f, _dragging.BuildingId, 0, null);
-            buildingSpawner.MoveBuilding(spawnerPose, _dragging.EngineId);
+            var debugPose = new TilePose(tuioPos, 0f, _dragging.BuildingId, 0, _dragging.DebugTileId);
+            coordinator.TryProcessTileUpdate(debugPose, out _);
         }
         else
         {
-            _dragging.Marker.anchoredPosition = targetLocal;
+            simulationEngine.UpdateTilePosition(_dragging.EngineId, targetLocal, 0f);
+
+            // Keep marker in sync (when using BuildingSpawner we must move via it because it owns the registered marker).
+            if (buildingSpawner != null)
+            {
+                Vector2 tuioPos = buildingSpawner.LocalToTuioPosition(targetLocal);
+                var spawnerPose = new TilePose(tuioPos, 0f, _dragging.BuildingId, 0, null);
+                buildingSpawner.MoveBuilding(spawnerPose, _dragging.EngineId);
+            }
+            else
+            {
+                _dragging.Marker.anchoredPosition = targetLocal;
+            }
         }
     }
 
