@@ -171,8 +171,7 @@ namespace CityTwin.UI
                 _pool.RemoveAt(i);
             }
 
-            var go = Instantiate(connectionPrefab, root, hubConnectionLineParent);
-            go.transform.SetParent(hubConnectionLineParent, false);
+            var go = Instantiate(connectionPrefab, root);
             
             var visual = go.GetComponent<IConnectionVisual>();
             if (visual == null)
