@@ -20,6 +20,7 @@ namespace CityTwin.UI
 
         [Tooltip("Prefab with a MonoBehaviour implementing IConnectionVisual (e.g. StretchedImageConnection).")]
         [SerializeField] private GameObject connectionPrefab;
+        [SerializeField] private Transform hubConnectionLineParent;
 
         [SerializeField] private HubRegistry hubRegistry;
         [SerializeField] private BuildingSpawner buildingSpawner;
@@ -170,7 +171,9 @@ namespace CityTwin.UI
                 _pool.RemoveAt(i);
             }
 
-            var go = Instantiate(connectionPrefab, root);
+            var go = Instantiate(connectionPrefab, root, hubConnectionLineParent);
+            go.transform.SetParent(hubConnectionLineParent, false);
+            
             var visual = go.GetComponent<IConnectionVisual>();
             if (visual == null)
             {
