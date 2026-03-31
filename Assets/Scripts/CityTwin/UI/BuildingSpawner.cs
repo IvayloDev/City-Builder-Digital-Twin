@@ -183,6 +183,42 @@ namespace CityTwin.UI
             return true;
         }
 
+        public bool TryGetEstimatedBuildingRadius(string buildingId, out float radius)
+        {
+            radius = 0f;
+            if (buildingMarkerPrefab == null) return false;
+
+            var display = buildingMarkerPrefab.GetComponentInChildren<BuildingMarkerDisplay>(true);
+            if (display == null) return false;
+
+            radius = display.GetVisualRadiusForBuilding(buildingId);
+            return radius > 0.001f;
+        }
+
+        public bool TryGetMarkerVisualRadius(string engineTileId, out float radius)
+        {
+            radius = 0f;
+            if (contentRoot == null) return false;
+            if (!TryGetMarkerDisplay(engineTileId, out var display)) return false;
+            return display.TryGetCurrentVisualRadius(contentRoot, out radius);
+        }
+
+        public bool TryGetMarkerDisplay(string engineTileId, out BuildingMarkerDisplay display)
+        {
+            display = null;
+            if (string.IsNullOrEmpty(engineTileId)) return false;
+            if (!_spawned.TryGetValue(engineTileId, out GameObject go) || go == null) return false;
+
+            display = go.GetComponentInChildren<BuildingMarkerDisplay>(true);
+            return display != null;
+        }
+
+        public void SetMarkerPlacementInvalid(string engineTileId, bool isInvalid, Color invalidColor)
+        {
+            if (!TryGetMarkerDisplay(engineTileId, out var display)) return;
+            display.SetPlacementInvalid(isInvalid, invalidColor);
+        }
+
         /// <summary>Remove all spawned markers (e.g. on reset).</summary>
         public void ClearAll()
         {

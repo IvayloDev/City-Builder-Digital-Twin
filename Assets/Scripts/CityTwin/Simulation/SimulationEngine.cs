@@ -119,13 +119,14 @@ namespace CityTwin.Simulation
                 BuildingId = pose.BuildingId,
                 Position = pose.Position,
                 Rotation = pose.Rotation,
-                Inactive = inactive
+                Inactive = inactive,
+                OverlapInvalid = false
             });
             RecalculateMetrics();
             return tileId;
         }
 
-        public bool UpdateTilePosition(string tileId, Vector2 position, float rotation)
+        public bool UpdateTilePosition(string tileId, Vector2 position, float rotation, bool overlapInvalid = false)
         {
             int idx = _placedTiles.FindIndex(t => t.TileId == tileId);
             if (idx < 0) return false;
@@ -133,6 +134,7 @@ namespace CityTwin.Simulation
             t.Position = position;
             t.Rotation = rotation;
             t.Inactive = IsOnObstacle(position);
+            t.OverlapInvalid = overlapInvalid;
             _placedTiles[idx] = t;
             RecalculateMetrics();
             return true;
@@ -151,7 +153,7 @@ namespace CityTwin.Simulation
         public bool IsTileInactive(string tileId)
         {
             int idx = _placedTiles.FindIndex(t => t.TileId == tileId);
-            return idx >= 0 && _placedTiles[idx].Inactive;
+            return idx >= 0 && (_placedTiles[idx].Inactive || _placedTiles[idx].OverlapInvalid);
         }
 
         /// <summary>Returns the building id for a placed tile, or null if not found. Use e.g. for refund on remove.</summary>
@@ -220,7 +222,7 @@ namespace CityTwin.Simulation
             {
                 foreach (var t in _placedTiles)
                 {
-                    if (t.Inactive) continue;
+                    if (t.Inactive || t.OverlapInvalid) continue;
                     var b = GetBuilding(t.BuildingId);
                     if (b == null || b.BaseValues == null) continue;
 
@@ -250,7 +252,7 @@ namespace CityTwin.Simulation
             {
                 foreach (var t in _placedTiles)
                 {
-                    if (t.Inactive) continue;
+                    if (t.Inactive || t.OverlapInvalid) continue;
                     float distToRoad = _transitGraph.DistanceToNearestSegment(t.Position);
                     bool roadConnected = distToRoad <= _roadConnectRange;
 
@@ -295,7 +297,7 @@ namespace CityTwin.Simulation
 
             foreach (var t in _placedTiles)
             {
-                if (t.Inactive) continue;
+                if (t.Inactive || t.OverlapInvalid) continue;
                 var b = GetBuilding(t.BuildingId);
                 if (b == null) continue;
 
@@ -424,6 +426,7 @@ namespace CityTwin.Simulation
             public Vector2 Position;
             public float Rotation;
             public bool Inactive;
+            public bool OverlapInvalid;
         }
     }
 }

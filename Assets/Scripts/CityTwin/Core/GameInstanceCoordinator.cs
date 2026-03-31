@@ -21,6 +21,8 @@ namespace CityTwin.Core
         [SerializeField] private HubRegistry hubRegistry;
         [Tooltip("Optional. Draws connection lines between buildings and hubs. Assign or auto-found in children.")]
         [SerializeField] private HubConnectionRenderer hubConnectionRenderer;
+        [Tooltip("Optional. Validates building overlap against buildings and hubs using visual radii.")]
+        [SerializeField] private PlacementOverlapValidator placementOverlapValidator;
 
         private readonly Dictionary<string, string> _oscToEngineTileId = new Dictionary<string, string>();
 
@@ -43,6 +45,7 @@ namespace CityTwin.Core
         private void OnEnable()
         {
             if (buildingSpawner == null) buildingSpawner = GetComponentInChildren<BuildingSpawner>(true);
+            if (placementOverlapValidator == null) placementOverlapValidator = GetComponentInChildren<PlacementOverlapValidator>(true);
             if (configLoader != null && configLoader.Config != null)
             {
                 var cfg = configLoader.Config;
@@ -64,6 +67,7 @@ namespace CityTwin.Core
                     BuildDefaultTransitGraphIfNeeded();
 
                 ApplyRegistryHubsToSimulation();
+                placementOverlapValidator?.RefreshHubFootprints();
             }
             if (sessionTimer != null && configLoader?.Config != null)
             {
@@ -84,6 +88,7 @@ namespace CityTwin.Core
         {
             // Run once after all Awake/OnEnable calls so hub/content references are stable.
             ApplyRegistryHubsToSimulation();
+            placementOverlapValidator?.RefreshHubFootprints();
             simulationEngine?.RecalculateMetrics();
         }
 
@@ -212,6 +217,7 @@ namespace CityTwin.Core
         private void OnTileUpdated(TilePose pose)
         {
             if (simulationEngine == null) { Debug.LogWarning("[Coordinator] simulationEngine is null, skipping."); return; }
+            placementOverlapValidator?.RefreshHubFootprints();
 
             Vector2 simPos = buildingSpawner != null
                 ? buildingSpawner.TuioToLocalPosition(pose.Position)
@@ -220,8 +226,16 @@ namespace CityTwin.Core
 
             if (_oscToEngineTileId.TryGetValue(pose.TileId, out string engineId))
             {
-                simulationEngine.UpdateTilePosition(engineId, simPose.Position, simPose.Rotation);
                 buildingSpawner?.MoveBuilding(pose, engineId);
+                float radius = placementOverlapValidator != null
+                    ? placementOverlapValidator.ResolveRadiusForTile(engineId, simPose.BuildingId)
+                    : 24f;
+                bool overlaps = placementOverlapValidator != null &&
+                                placementOverlapValidator.IsOverlapping(engineId, simPose.Position, radius);
+
+                simulationEngine.UpdateTilePosition(engineId, simPose.Position, simPose.Rotation, overlaps);
+                placementOverlapValidator?.UpsertTile(engineId, simPose.Position, radius, overlaps);
+                placementOverlapValidator?.SetTileVisualInvalid(engineId, overlaps);
                 //Debug.Log($"[Coordinator] Move tile {engineId} → simPos=({simPose.Position.x:F0},{simPose.Position.y:F0})");
                 return;
             }
@@ -235,6 +249,14 @@ namespace CityTwin.Core
                     if (b.Id == pose.BuildingId) { price = b.Price; break; }
                 }
             }
+            float candidateRadius = placementOverlapValidator != null
+                ? placementOverlapValidator.ResolveRadiusForBuilding(simPose.BuildingId)
+                : 24f;
+            if (placementOverlapValidator != null &&
+                placementOverlapValidator.IsOverlapping(null, simPose.Position, candidateRadius))
+            {
+                return;
+            }
             if (price > 0 && Budget < price) { Debug.Log($"[Coordinator] Not enough budget: need {price}, have {Budget}. Skipping."); return; }
             if (price > 0) Budget -= price;
             engineId = simulationEngine.AddTile(simPose);
@@ -242,7 +264,15 @@ namespace CityTwin.Core
             if (!string.IsNullOrEmpty(pose.TileId) && !string.IsNullOrEmpty(engineId))
                 _oscToEngineTileId[pose.TileId] = engineId;
             if (buildingSpawner == null) Debug.LogWarning("[Coordinator] buildingSpawner is null, no visual will be spawned.");
-            if (!string.IsNullOrEmpty(engineId)) buildingSpawner?.SpawnBuilding(pose, engineId);
+            if (!string.IsNullOrEmpty(engineId))
+            {
+                buildingSpawner?.SpawnBuilding(pose, engineId);
+                float placedRadius = placementOverlapValidator != null
+                    ? placementOverlapValidator.ResolveRadiusForTile(engineId, simPose.BuildingId)
+                    : candidateRadius;
+                placementOverlapValidator?.UpsertTile(engineId, simPose.Position, placedRadius, false);
+                placementOverlapValidator?.SetTileVisualInvalid(engineId, false);
+            }
         }
 
         private void OnTileRemoved(string oscTileId)
@@ -254,6 +284,7 @@ namespace CityTwin.Core
                 _oscToEngineTileId.Remove(oscTileId);
                 buildingSpawner?.RemoveBuilding(engineId);
                 simulationEngine.RemoveTile(engineId);
+                placementOverlapValidator?.RemoveTile(engineId);
                 RefundBudgetForBuilding(buildingId);
                 //Debug.Log($"[Coordinator] Tile removed oscTileId={oscTileId} engineId={engineId} → refunded; budget now {Budget}");
             }

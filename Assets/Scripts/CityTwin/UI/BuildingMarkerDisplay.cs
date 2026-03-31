@@ -18,17 +18,24 @@ namespace CityTwin.UI
         [SerializeField] private BuildingVisualConfig visualConfig;
         [Tooltip("Base halo scale before applying per-building multiplier from config.")]
         [SerializeField] private float baseHaloScale = 1f;
+        [Tooltip("Fallback halo radius used when no halo image/rect is available.")]
+        [SerializeField] private float fallbackHaloRadius = 24f;
+
+        private string _currentBuildingId;
+        private bool _isPlacementInvalid;
+        private Color _invalidHaloColor = Color.red;
+        private Color _configuredHaloColor = Color.white;
+        private bool _hasConfiguredHaloColor;
 
         private void Awake()
         {
-            if (label == null) label = GetComponentInChildren<TextMeshProUGUI>(true);
-            if (icon == null) icon = GetComponentInChildren<Image>(true);
-            if (haloRoot == null && haloImage != null) haloRoot = haloImage.transform;
-            if (haloImage == null && haloRoot != null) haloImage = haloRoot.GetComponentInChildren<Image>(true);
+            EnsureReferences();
         }
 
         public void SetBuilding(string buildingId)
         {
+            _currentBuildingId = buildingId;
+
             if (label != null)
                 label.text = string.IsNullOrEmpty(buildingId) ? "?" : buildingId;
             if (icon != null)
@@ -51,6 +58,8 @@ namespace CityTwin.UI
 
         private void ApplyVisuals(string buildingId)
         {
+            EnsureReferences();
+
             float multiplier = 1f;
             Color? haloColor = null;
 
@@ -68,8 +77,115 @@ namespace CityTwin.UI
             if (haloRoot != null)
                 haloRoot.localScale = new Vector3(scale, scale, 1f);
 
-            if (haloImage != null && haloColor.HasValue)
-                haloImage.color = haloColor.Value;
+            if (haloColor.HasValue)
+            {
+                _configuredHaloColor = haloColor.Value;
+                _hasConfiguredHaloColor = true;
+            }
+            else if (haloImage != null)
+            {
+                _configuredHaloColor = haloImage.color;
+                _hasConfiguredHaloColor = true;
+            }
+
+            ApplyHaloColorState();
+        }
+
+        public void SetPlacementInvalid(bool isInvalid, Color invalidColor)
+        {
+            _isPlacementInvalid = isInvalid;
+            _invalidHaloColor = invalidColor;
+            ApplyHaloColorState();
+        }
+
+        public float GetVisualRadiusForBuilding(string buildingId)
+        {
+            EnsureReferences();
+            float multiplier = GetHaloScaleMultiplier(buildingId);
+            float radius = GetBaseHaloRadius();
+            float scale = Mathf.Max(0.01f, baseHaloScale * multiplier);
+            return Mathf.Max(1f, radius * scale);
+        }
+
+        public bool TryGetCurrentVisualRadius(RectTransform inSpace, out float radius)
+        {
+            radius = 0f;
+            EnsureReferences();
+
+            if (inSpace == null)
+            {
+                radius = GetVisualRadiusForBuilding(_currentBuildingId);
+                return true;
+            }
+
+            if (haloImage != null)
+            {
+                var bounds = RectTransformUtility.CalculateRelativeRectTransformBounds(inSpace, haloImage.rectTransform);
+                radius = Mathf.Max(bounds.extents.x, bounds.extents.y);
+                if (radius > 0.001f) return true;
+            }
+
+            if (haloRoot is RectTransform haloRect)
+            {
+                var bounds = RectTransformUtility.CalculateRelativeRectTransformBounds(inSpace, haloRect);
+                radius = Mathf.Max(bounds.extents.x, bounds.extents.y);
+                if (radius > 0.001f) return true;
+            }
+
+            radius = GetVisualRadiusForBuilding(_currentBuildingId);
+            return true;
+        }
+
+        private void EnsureReferences()
+        {
+            if (label == null) label = GetComponentInChildren<TextMeshProUGUI>(true);
+            if (icon == null) icon = GetComponentInChildren<Image>(true);
+            if (haloRoot == null && haloImage != null) haloRoot = haloImage.transform;
+            if (haloImage == null && haloRoot != null) haloImage = haloRoot.GetComponentInChildren<Image>(true);
+        }
+
+        private float GetHaloScaleMultiplier(string buildingId)
+        {
+            float multiplier = 1f;
+            if (visualConfig == null || string.IsNullOrEmpty(buildingId))
+                return multiplier;
+
+            var entry = visualConfig.GetEntry(buildingId);
+            if (entry != null)
+                multiplier = entry.haloScaleMultiplier;
+            return Mathf.Max(0.01f, multiplier);
+        }
+
+        private float GetBaseHaloRadius()
+        {
+            if (haloImage != null && haloImage.rectTransform != null)
+            {
+                var rect = haloImage.rectTransform.rect;
+                float r = Mathf.Max(rect.width, rect.height) * 0.5f;
+                if (r > 0.001f) return r;
+            }
+
+            if (haloRoot is RectTransform haloRect)
+            {
+                var rect = haloRect.rect;
+                float r = Mathf.Max(rect.width, rect.height) * 0.5f;
+                if (r > 0.001f) return r;
+            }
+
+            return Mathf.Max(1f, fallbackHaloRadius);
+        }
+
+        private void ApplyHaloColorState()
+        {
+            if (haloImage == null) return;
+            if (_isPlacementInvalid)
+            {
+                haloImage.color = _invalidHaloColor;
+                return;
+            }
+
+            if (_hasConfiguredHaloColor)
+                haloImage.color = _configuredHaloColor;
         }
     }
 }

@@ -1,3 +1,4 @@
+using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
@@ -42,11 +43,27 @@ namespace CityTwin.UI
         private readonly List<IConnectionVisual> _pool = new List<IConnectionVisual>();
         private readonly HashSet<(string, int)> _currentBuildingHubKeys = new HashSet<(string, int)>();
         private readonly HashSet<(int, int)> _currentHubHubKeys = new HashSet<(int, int)>();
+        private static readonly IReadOnlyList<SimulationEngine.TileHubConnection> EmptyConnections =
+            new List<SimulationEngine.TileHubConnection>();
+
+        private void Awake()
+        {
+            if (hubRegistry == null) hubRegistry = GetComponentInChildren<HubRegistry>(true);
+            if (buildingSpawner == null) buildingSpawner = GetComponentInChildren<BuildingSpawner>(true);
+            if (simulationEngine == null) simulationEngine = GetComponentInChildren<SimulationEngine>(true);
+        }
 
         private void OnEnable()
         {
             if (simulationEngine != null)
                 simulationEngine.OnMetricsChanged += Refresh;
+            Refresh();
+        }
+
+        private IEnumerator Start()
+        {
+            // One delayed refresh ensures content-root layout and hub transforms are ready after scene transition.
+            yield return null;
             Refresh();
         }
 
@@ -58,7 +75,7 @@ namespace CityTwin.UI
 
         private void Refresh()
         {
-            if (simulationEngine == null || hubRegistry == null || buildingSpawner == null || connectionPrefab == null)
+            if (hubRegistry == null || buildingSpawner == null || connectionPrefab == null)
                 return;
 
             // Always use the table (BuildingSpawner's root) so lines draw on the map with the buildings
@@ -66,7 +83,8 @@ namespace CityTwin.UI
             if (root == null)
                 return;
 
-            var connections = simulationEngine.ActiveConnections;
+            hubRegistry.FetchHubs();
+            var connections = simulationEngine != null ? simulationEngine.ActiveConnections : EmptyConnections;
             var hubs = hubRegistry.Hubs;
 
             _currentBuildingHubKeys.Clear();
