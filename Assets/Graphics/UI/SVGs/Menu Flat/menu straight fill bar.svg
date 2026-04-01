@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg id="menu_straight_fill_bar" data-name="menu straight fill bar" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 1400 300">
+  <defs>
+    <style>
+      .cls-1 {
+        stroke: #ff9100;
+      }
+
+      .cls-1, .cls-2, .cls-3, .cls-4, .cls-5, .cls-6 {
+        fill: none;
+        stroke-linecap: round;
+        stroke-miterlimit: 10;
+      }
+
+      .cls-1, .cls-2, .cls-3, .cls-4, .cls-6 {
+        stroke-width: 5px;
+      }
+
+      .cls-2 {
+        stroke: #9cff00;
+      }
+
+      .cls-3 {
+        stroke: #f0f;
+      }
+
+      .cls-4 {
+        stroke: #3386ff;
+      }
+
+      .cls-5 {
+        stroke: url(#linear-gradient);
+        stroke-width: 8px;
+      }
+
+      .cls-6 {
+        stroke: aqua;
+      }
+    </style>
+    <linearGradient id="linear-gradient" x1="655.29" y1="180.18" x2="740.33" y2="180.18" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#f0f"/>
+      <stop offset=".97" stop-color="#3386ff"/>
+    </linearGradient>
+  </defs>
+  <line class="cls-2" x1="229.05" y1="105.47" x2="302.24" y2="105.47"/>
+  <line class="cls-1" x1="420.31" y1="105.47" x2="471.11" y2="105.47"/>
+  <line class="cls-4" x1="614.49" y1="105.47" x2="715.47" y2="105.47"/>
+  <line class="cls-3" x1="809.69" y1="105.47" x2="850.16" y2="105.47"/>
+  <line class="cls-6" x1="1001.25" y1="105.47" x2="1041.72" y2="105.47"/>
+  <path class="cls-5" d="M697.81,141.66c21.27,0,38.52,17.25,38.52,38.52s-17.25,38.52-38.52,38.52-38.52-17.25-38.52-38.52c0-7.25,2-14.03,5.48-19.82"/>
+</svg>
