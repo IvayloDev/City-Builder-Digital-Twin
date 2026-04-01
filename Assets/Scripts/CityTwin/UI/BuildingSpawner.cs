@@ -219,6 +219,12 @@ namespace CityTwin.UI
             display.SetPlacementInvalid(isInvalid, invalidColor);
         }
 
+        public void SetMarkerConnectionState(string engineTileId, MarkerConnectionState state)
+        {
+            if (!TryGetMarkerDisplay(engineTileId, out var display)) return;
+            display.SetConnectionState(state);
+        }
+
         /// <summary>Remove all spawned markers (e.g. on reset).</summary>
         public void ClearAll()
         {

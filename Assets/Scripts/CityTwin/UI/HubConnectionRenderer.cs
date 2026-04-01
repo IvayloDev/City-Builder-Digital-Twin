@@ -8,11 +8,13 @@ using CityTwin.Simulation;
 namespace CityTwin.UI
 {
     /// <summary>
-    /// Manages visual connection lines between placed building tiles and the hubs they affect,
+    /// Manages visual connection lines between placed building tiles and road snap-points,
     /// and optional hub-to-hub links.
-    /// A building in range of multiple hubs gets one line to each such hub.
-    /// Uses a pooled prefab with an IConnectionVisual implementation so the visual style
-    /// (Image, LineRenderer, particles, etc.) can be swapped by changing the prefab.
+    /// Buildings connect to nearest points on road segments (transit graph edges).
+    /// Each building-road connection is drawn as two layers:
+    ///   Layer 1 (bg): wide, low-opacity stroke matching road style.
+    ///   Layer 2 (fg): thinner, higher-opacity stroke.
+    /// After drawing, updates building marker visuals to reflect connection state.
     /// </summary>
     public class HubConnectionRenderer : MonoBehaviour
     {
@@ -21,30 +23,37 @@ namespace CityTwin.UI
 
         [Tooltip("Prefab with a MonoBehaviour implementing IConnectionVisual (e.g. StretchedImageConnection).")]
         [SerializeField] private GameObject connectionPrefab;
-        [SerializeField] private Transform hubConnectionLineParent;
+
+        [Tooltip("Optional holder for building-road connection lines. Must be a RectTransform child of the content root. Automatically configured to stretch-fill so coordinates match. If null, lines parent directly to the content root.")]
+        [SerializeField] private RectTransform buildingRoadLineHolder;
+
+        [Tooltip("Optional holder for hub-hub connection lines. Must be a RectTransform child of the content root. Automatically configured to stretch-fill so coordinates match. If null, lines parent directly to the content root.")]
+        [SerializeField] private RectTransform hubHubLineHolder;
 
         [SerializeField] private HubRegistry hubRegistry;
         [SerializeField] private BuildingSpawner buildingSpawner;
         [SerializeField] private SimulationEngine simulationEngine;
 
-        [Header("Building -> Hub")]
-        [SerializeField] private bool useBuildingHubColorOverride = false;
-        [SerializeField] private Color buildingHubColor = Color.white;
+        [Header("Building -> Road (two-layer)")]
+        [SerializeField] private Color buildingRoadBgColor = new Color(0.486f, 0.549f, 0.627f, 0.25f); // #7c8ca0 at 25%
+        [SerializeField] private Color buildingRoadFgColor = new Color(0.486f, 0.549f, 0.627f, 0.50f); // #7c8ca0 at 50%
+        [SerializeField] private float bgThickness = 7f;
+        [SerializeField] private float fgThickness = 3f;
 
         [Header("Hub -> Hub")]
         [SerializeField] private bool drawHubToHubConnections = true;
         [SerializeField] private bool useHubToHubColorOverride = true;
         [SerializeField] private Color hubToHubColor = new Color(0.5f, 0.85f, 1f, 0.7f);
 
-        private readonly Dictionary<(string tileId, int hubIndex), IConnectionVisual> _activeBuildingHub =
+        private readonly Dictionary<(string tileId, int snapIndex), IConnectionVisual> _buildingRoadBg =
+            new Dictionary<(string, int), IConnectionVisual>();
+        private readonly Dictionary<(string tileId, int snapIndex), IConnectionVisual> _buildingRoadFg =
             new Dictionary<(string, int), IConnectionVisual>();
         private readonly Dictionary<(int hubA, int hubB), IConnectionVisual> _activeHubHub =
             new Dictionary<(int, int), IConnectionVisual>();
         private readonly List<IConnectionVisual> _pool = new List<IConnectionVisual>();
-        private readonly HashSet<(string, int)> _currentBuildingHubKeys = new HashSet<(string, int)>();
+        private readonly HashSet<(string, int)> _currentBuildingRoadKeys = new HashSet<(string, int)>();
         private readonly HashSet<(int, int)> _currentHubHubKeys = new HashSet<(int, int)>();
-        private static readonly IReadOnlyList<SimulationEngine.TileHubConnection> EmptyConnections =
-            new List<SimulationEngine.TileHubConnection>();
 
         private void Awake()
         {
@@ -62,7 +71,6 @@ namespace CityTwin.UI
 
         private IEnumerator Start()
         {
-            // One delayed refresh ensures content-root layout and hub transforms are ready after scene transition.
             yield return null;
             Refresh();
         }
@@ -75,91 +83,116 @@ namespace CityTwin.UI
 
         private void Refresh()
         {
-            if (hubRegistry == null || buildingSpawner == null || connectionPrefab == null)
+            if (buildingSpawner == null || connectionPrefab == null)
                 return;
 
-            // Always use the table (BuildingSpawner's root) so lines draw on the map with the buildings
             RectTransform root = buildingSpawner.ContentRoot != null ? buildingSpawner.ContentRoot : contentRootOverride;
             if (root == null)
                 return;
 
-            hubRegistry.FetchHubs();
-            var connections = simulationEngine != null ? simulationEngine.ActiveConnections : EmptyConnections;
-            var hubs = hubRegistry.Hubs;
-
-            _currentBuildingHubKeys.Clear();
+            _currentBuildingRoadKeys.Clear();
             _currentHubHubKeys.Clear();
             bool useTableSpace = (root == buildingSpawner.ContentRoot);
 
-            for (int i = 0; i < connections.Count; i++)
+            RectTransform brParent = buildingRoadLineHolder != null ? buildingRoadLineHolder : root;
+            RectTransform hhParent = hubHubLineHolder != null ? hubHubLineHolder : root;
+            EnsureHolderSetup(buildingRoadLineHolder);
+            EnsureHolderSetup(hubHubLineHolder);
+
+            // --- Building -> Road snap-point lines (two layers) ---
+            if (simulationEngine != null)
             {
-                var c = connections[i];
-                if (c.HubIndex < 0 || c.HubIndex >= hubs.Count) continue;
+                var roadConnections = simulationEngine.ActiveRoadConnections;
+                var perTileSnapIndex = new Dictionary<string, int>();
 
-                Vector2 buildingPos;
-                bool gotBuilding = useTableSpace
-                    ? buildingSpawner.TryGetMarkerPosition(c.TileId, out buildingPos)
-                    : buildingSpawner.TryGetMarkerPositionIn(c.TileId, root, out buildingPos);
-                if (!gotBuilding) continue;
-
-                Vector2 hubPos = GetHubLocalPosition(hubs[c.HubIndex], root);
-                var key = (c.TileId, c.HubIndex);
-                _currentBuildingHubKeys.Add(key);
-
-                if (!_activeBuildingHub.TryGetValue(key, out IConnectionVisual visual))
+                for (int i = 0; i < roadConnections.Count; i++)
                 {
-                    visual = Acquire(root);
-                    if (visual == null) continue;
-                    _activeBuildingHub[key] = visual;
-                }
+                    var rc = roadConnections[i];
 
-                visual.UpdateEndpoints(buildingPos, hubPos);
-                if (useBuildingHubColorOverride)
-                    ApplyColor(visual, buildingHubColor);
-                visual.SetActive(true);
-            }
+                    Vector2 buildingPos;
+                    bool gotBuilding = useTableSpace
+                        ? buildingSpawner.TryGetMarkerPosition(rc.TileId, out buildingPos)
+                        : buildingSpawner.TryGetMarkerPositionIn(rc.TileId, root, out buildingPos);
+                    if (!gotBuilding) continue;
 
-            if (drawHubToHubConnections && hubs.Count >= 2)
-            {
-                for (int i = 0; i < hubs.Count - 1; i++)
-                {
-                    Vector2 a = GetHubLocalPosition(hubs[i], root);
-                    for (int j = i + 1; j < hubs.Count; j++)
+                    if (!perTileSnapIndex.TryGetValue(rc.TileId, out int snapIdx))
+                        snapIdx = 0;
+                    perTileSnapIndex[rc.TileId] = snapIdx + 1;
+
+                    var key = (rc.TileId, snapIdx);
+                    _currentBuildingRoadKeys.Add(key);
+
+                    Vector2 brFrom = RootToHolderSpace(buildingPos, root, brParent);
+                    Vector2 brTo = RootToHolderSpace(rc.SnapPoint, root, brParent);
+
+                    // Layer 1: Background (wide, dim)
+                    if (!_buildingRoadBg.TryGetValue(key, out IConnectionVisual bgVisual))
                     {
-                        Vector2 b = GetHubLocalPosition(hubs[j], root);
-                        var key = (i, j);
-                        _currentHubHubKeys.Add(key);
+                        bgVisual = Acquire(brParent);
+                        if (bgVisual != null)
+                            _buildingRoadBg[key] = bgVisual;
+                    }
+                    if (bgVisual != null)
+                    {
+                        bgVisual.UpdateEndpoints(brFrom, brTo);
+                        ApplyStyle(bgVisual, buildingRoadBgColor, bgThickness);
+                        bgVisual.SetActive(true);
+                    }
 
-                        if (!_activeHubHub.TryGetValue(key, out IConnectionVisual visual))
-                        {
-                            visual = Acquire(root);
-                            if (visual == null) continue;
-                            _activeHubHub[key] = visual;
-                        }
-
-                        visual.UpdateEndpoints(a, b);
-                        if (useHubToHubColorOverride)
-                            ApplyColor(visual, hubToHubColor);
-                        visual.SetActive(true);
+                    // Layer 2: Foreground (thin, brighter)
+                    if (!_buildingRoadFg.TryGetValue(key, out IConnectionVisual fgVisual))
+                    {
+                        fgVisual = Acquire(brParent);
+                        if (fgVisual != null)
+                            _buildingRoadFg[key] = fgVisual;
+                    }
+                    if (fgVisual != null)
+                    {
+                        fgVisual.UpdateEndpoints(brFrom, brTo);
+                        ApplyStyle(fgVisual, buildingRoadFgColor, fgThickness);
+                        fgVisual.SetActive(true);
                     }
                 }
             }
 
-            // Deactivate visuals no longer needed (building -> hub)
-            var toRemove = new List<(string, int)>();
-            foreach (var kv in _activeBuildingHub)
+            // --- Hub -> Hub lines (optional, kept for backward compat) ---
+            if (drawHubToHubConnections && hubRegistry != null)
             {
-                if (!_currentBuildingHubKeys.Contains(kv.Key))
+                hubRegistry.FetchHubs();
+                var hubs = hubRegistry.Hubs;
+                if (hubs.Count >= 2)
                 {
-                    kv.Value.SetActive(false);
-                    _pool.Add(kv.Value);
-                    toRemove.Add(kv.Key);
+                    for (int i = 0; i < hubs.Count - 1; i++)
+                    {
+                        Vector2 a = RootToHolderSpace(GetHubLocalPosition(hubs[i], root), root, hhParent);
+                        for (int j = i + 1; j < hubs.Count; j++)
+                        {
+                            Vector2 b = RootToHolderSpace(GetHubLocalPosition(hubs[j], root), root, hhParent);
+                            var key = (i, j);
+                            _currentHubHubKeys.Add(key);
+
+                            if (!_activeHubHub.TryGetValue(key, out IConnectionVisual visual))
+                            {
+                                visual = Acquire(hhParent);
+                                if (visual == null) continue;
+                                _activeHubHub[key] = visual;
+                            }
+
+                            visual.UpdateEndpoints(a, b);
+                            if (useHubToHubColorOverride)
+                                ApplyColor(visual, hubToHubColor);
+                            visual.SetActive(true);
+                        }
+                    }
                 }
             }
-            for (int i = 0; i < toRemove.Count; i++)
-                _activeBuildingHub.Remove(toRemove[i]);
 
-            // Deactivate visuals no longer needed (hub -> hub)
+            // --- Deactivate unused building-road visuals (bg layer) ---
+            RecycleStale(_buildingRoadBg, _currentBuildingRoadKeys);
+            // --- Deactivate unused building-road visuals (fg layer) ---
+            RecycleStale(_buildingRoadFg, _currentBuildingRoadKeys);
+
+            // --- Deactivate unused hub-hub visuals ---
             var toRemoveHubHub = new List<(int, int)>();
             foreach (var kv in _activeHubHub)
             {
@@ -172,6 +205,73 @@ namespace CityTwin.UI
             }
             for (int i = 0; i < toRemoveHubHub.Count; i++)
                 _activeHubHub.Remove(toRemoveHubHub[i]);
+
+            // --- Update building marker connection states ---
+            UpdateMarkerConnectionStates();
+        }
+
+        private void RecycleStale(Dictionary<(string, int), IConnectionVisual> dict, HashSet<(string, int)> currentKeys)
+        {
+            var toRemove = new List<(string, int)>();
+            foreach (var kv in dict)
+            {
+                if (!currentKeys.Contains(kv.Key))
+                {
+                    kv.Value.SetActive(false);
+                    _pool.Add(kv.Value);
+                    toRemove.Add(kv.Key);
+                }
+            }
+            for (int i = 0; i < toRemove.Count; i++)
+                dict.Remove(toRemove[i]);
+        }
+
+        private void UpdateMarkerConnectionStates()
+        {
+            if (simulationEngine == null || buildingSpawner == null) return;
+
+            var graph = simulationEngine.TransitGraph;
+            bool hasRoads = graph != null && graph.Edges.Count > 0;
+
+            var tileStates = simulationEngine.TileStates;
+            for (int i = 0; i < tileStates.Count; i++)
+            {
+                var ts = tileStates[i];
+                MarkerConnectionState state;
+
+                if (ts.Inactive || ts.OverlapInvalid)
+                    state = MarkerConnectionState.Inactive;
+                else if (hasRoads && !ts.Connected)
+                    state = MarkerConnectionState.Disconnected;
+                else
+                    state = MarkerConnectionState.Connected;
+
+                buildingSpawner.SetMarkerConnectionState(ts.TileId, state);
+            }
+        }
+
+        /// <summary>Force a holder RectTransform to stretch-fill its parent with center pivot.</summary>
+        private static void EnsureHolderSetup(RectTransform holder)
+        {
+            if (holder == null) return;
+            holder.anchorMin = Vector2.zero;
+            holder.anchorMax = Vector2.one;
+            holder.offsetMin = Vector2.zero;
+            holder.offsetMax = Vector2.zero;
+            holder.pivot = new Vector2(0.5f, 0.5f);
+            holder.localScale = Vector3.one;
+            holder.localRotation = Quaternion.identity;
+        }
+
+        /// <summary>Convert a position from content root center-origin space to a holder's
+        /// center-origin space via world-space, so the holder can live anywhere in the hierarchy.</summary>
+        private static Vector2 RootToHolderSpace(Vector2 pos, RectTransform root, RectTransform holder)
+        {
+            if (holder == null || holder == root) return pos;
+            Vector2 rootLocal = pos + (Vector2)root.rect.center;
+            Vector3 world = root.TransformPoint(new Vector3(rootLocal.x, rootLocal.y, 0f));
+            Vector3 hl = holder.InverseTransformPoint(world);
+            return new Vector2(hl.x, hl.y) - (Vector2)holder.rect.center;
         }
 
         private IConnectionVisual Acquire(RectTransform root)
@@ -190,7 +290,7 @@ namespace CityTwin.UI
             }
 
             var go = Instantiate(connectionPrefab, root);
-            
+
             var visual = go.GetComponent<IConnectionVisual>();
             if (visual == null)
             {
@@ -208,6 +308,15 @@ namespace CityTwin.UI
             if (graphic != null) graphic.color = color;
         }
 
+        private static void ApplyStyle(IConnectionVisual visual, Color color, float thickness)
+        {
+            if (!(visual is MonoBehaviour mb) || mb == null) return;
+            var graphic = mb.GetComponent<Graphic>();
+            if (graphic != null) graphic.color = color;
+            if (mb.transform is RectTransform rt)
+                rt.sizeDelta = new Vector2(rt.sizeDelta.x, thickness);
+        }
+
         /// <summary>Hub position in the center-anchored space of root (same space as building markers).
         /// Corrects for root pivot so (0,0) = center of root rect, matching TuioToLocal and marker anchoredPositions.</summary>
         private Vector2 GetHubLocalPosition(ResidentialHubMono hub, RectTransform root)
@@ -221,15 +330,8 @@ namespace CityTwin.UI
         /// <summary>Remove all visuals and return them to pool. Call on reset.</summary>
         public void ClearAll()
         {
-            foreach (var kv in _activeBuildingHub)
-            {
-                if (kv.Value != null)
-                {
-                    kv.Value.SetActive(false);
-                    _pool.Add(kv.Value);
-                }
-            }
-            _activeBuildingHub.Clear();
+            ClearDict(_buildingRoadBg);
+            ClearDict(_buildingRoadFg);
 
             foreach (var kv in _activeHubHub)
             {
@@ -240,6 +342,19 @@ namespace CityTwin.UI
                 }
             }
             _activeHubHub.Clear();
+        }
+
+        private void ClearDict(Dictionary<(string, int), IConnectionVisual> dict)
+        {
+            foreach (var kv in dict)
+            {
+                if (kv.Value != null)
+                {
+                    kv.Value.SetActive(false);
+                    _pool.Add(kv.Value);
+                }
+            }
+            dict.Clear();
         }
     }
 }

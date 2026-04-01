@@ -25,9 +25,9 @@ namespace CityTwin.Simulation
         private float _defaultConnectionRadius = 500f;
         private float _populationScale = 1000f;
 
-        private const float RadiusSmall = 300f;
-        private const float RadiusMedium = 400f;
-        private const float RadiusLarge = 500f;
+        private const float RadiusSmall = 400f;
+        private const float RadiusMedium = 500f;
+        private const float RadiusLarge = 600f;
 
         private float _qol;
         private float _environment;
@@ -64,6 +64,31 @@ namespace CityTwin.Simulation
 
         private readonly List<TileHubConnection> _activeConnections = new List<TileHubConnection>();
         public IReadOnlyList<TileHubConnection> ActiveConnections => _activeConnections;
+
+        public struct TileRoadConnection
+        {
+            public string TileId;
+            public Vector2 SnapPoint;
+            public float Distance;
+        }
+
+        private readonly List<TileRoadConnection> _activeRoadConnections = new List<TileRoadConnection>();
+        public IReadOnlyList<TileRoadConnection> ActiveRoadConnections => _activeRoadConnections;
+
+        public struct TilePlacementState
+        {
+            public string TileId;
+            public string BuildingId;
+            public Vector2 Position;
+            public bool Connected;
+            public bool Inactive;
+            public bool OverlapInvalid;
+        }
+
+        private readonly List<TilePlacementState> _tileStates = new List<TilePlacementState>();
+        public IReadOnlyList<TilePlacementState> TileStates => _tileStates;
+
+        public TransitGraph TransitGraph => _transitGraph;
 
         public event Action OnMetricsChanged;
 
@@ -108,11 +133,23 @@ namespace CityTwin.Simulation
             var def = GetBuilding(pose.BuildingId);
             if (def == null)
             {
-                Debug.LogWarning($"[SimulationEngine] AddTile: no building in catalog for id '{pose.BuildingId}'. Check TUIO classId mapping or add this id to game_config buildings.");
+                Debug.LogWarning($"[SimEngine:AddTile] FAILED — no building in catalog for id '{pose.BuildingId}'. " +
+                                 $"Catalog has {_buildingCatalog.Count} entries: [{string.Join(", ", _buildingCatalog.ConvertAll(b => b.Id))}]");
                 return null;
             }
             string tileId = $"tile_{_nextTileId++}";
             bool inactive = IsOnObstacle(pose.Position);
+            var roadConns = inactive ? new List<TransitGraph.ConnectionPoint>()
+                                     : _transitGraph.GetRoadConnections(pose.Position, _roadConnectRange);
+
+            float nearestSegDist = _transitGraph.Edges.Count > 0
+                ? _transitGraph.DistanceToNearestSegment(pose.Position)
+                : -1f;
+
+            Debug.Log($"[SimEngine:AddTile] {tileId} building={pose.BuildingId} pos=({pose.Position.x:F1},{pose.Position.y:F1}) " +
+                      $"onObstacle={inactive} roadConns={roadConns.Count} roadConnectRange={_roadConnectRange:F0} " +
+                      $"nearestSegDist={nearestSegDist:F1} graphNodes={_transitGraph.Nodes.Count} graphEdges={_transitGraph.Edges.Count}");
+
             _placedTiles.Add(new PlacedTile
             {
                 TileId = tileId,
@@ -120,7 +157,9 @@ namespace CityTwin.Simulation
                 Position = pose.Position,
                 Rotation = pose.Rotation,
                 Inactive = inactive,
-                OverlapInvalid = false
+                OverlapInvalid = false,
+                Connected = roadConns.Count > 0,
+                RoadConnections = roadConns
             });
             RecalculateMetrics();
             return tileId;
@@ -135,6 +174,10 @@ namespace CityTwin.Simulation
             t.Rotation = rotation;
             t.Inactive = IsOnObstacle(position);
             t.OverlapInvalid = overlapInvalid;
+            t.RoadConnections = t.Inactive
+                ? new List<TransitGraph.ConnectionPoint>()
+                : _transitGraph.GetRoadConnections(position, _roadConnectRange);
+            t.Connected = t.RoadConnections.Count > 0;
             _placedTiles[idx] = t;
             RecalculateMetrics();
             return true;
@@ -153,7 +196,14 @@ namespace CityTwin.Simulation
         public bool IsTileInactive(string tileId)
         {
             int idx = _placedTiles.FindIndex(t => t.TileId == tileId);
-            return idx >= 0 && (_placedTiles[idx].Inactive || _placedTiles[idx].OverlapInvalid);
+            return idx >= 0 && _placedTiles[idx].Inactive;
+        }
+
+        /// <summary>True if the tile is connected to at least one road segment within roadConnectRange.</summary>
+        public bool IsTileConnected(string tileId)
+        {
+            int idx = _placedTiles.FindIndex(t => t.TileId == tileId);
+            return idx >= 0 && _placedTiles[idx].Connected;
         }
 
         /// <summary>Returns the building id for a placed tile, or null if not found. Use e.g. for refund on remove.</summary>
@@ -168,7 +218,6 @@ namespace CityTwin.Simulation
             int hubCount;
             Vector2[] hubPositions;
             float[] hubPopulations;
-            bool useSpecFormula;
 
             if (_scoringHubs != null && _scoringHubs.Count > 0)
             {
@@ -180,7 +229,6 @@ namespace CityTwin.Simulation
                     hubPositions[i] = _scoringHubs[i].position;
                     hubPopulations[i] = _scoringHubs[i].population / _populationScale;
                 }
-                useSpecFormula = true;
             }
             else
             {
@@ -190,6 +238,8 @@ namespace CityTwin.Simulation
                     _environment = _economy = _healthSafety = _cultureEdu = _accessibility = 0f;
                     _qol = 0f;
                     _activeConnections.Clear();
+                    _activeRoadConnections.Clear();
+                    _tileStates.Clear();
                     _hubMetrics.Clear();
                     if (logMetricsWhenChanged)
                         Debug.Log("[Metrics] QOL=0 (no hubs/graph) | tiles=" + _placedTiles.Count);
@@ -204,7 +254,6 @@ namespace CityTwin.Simulation
                     hubPositions[i] = nodes[i].Position;
                     hubPopulations[i] = nodes[i].Population / _populationScale;
                 }
-                useSpecFormula = false;
             }
 
             float[] hubEnv = new float[hubCount];
@@ -214,73 +263,60 @@ namespace CityTwin.Simulation
             float[] hubAcc = new float[hubCount];
 
             _activeConnections.Clear();
+            _activeRoadConnections.Clear();
+            _tileStates.Clear();
 
-            // --- Standard metrics: (BaseValue x Population) / RadialDistance ---
-            // Spec path: no road-connectivity gate; tiles affect hubs purely by radial distance.
-            // Legacy path: road-connected + inverse-square influence (kept for backward compat).
-            if (useSpecFormula)
+            // Populate tile placement states and road connection visuals
+            foreach (var t in _placedTiles)
             {
-                foreach (var t in _placedTiles)
+                _tileStates.Add(new TilePlacementState
                 {
-                    if (t.Inactive || t.OverlapInvalid) continue;
-                    var b = GetBuilding(t.BuildingId);
-                    if (b == null || b.BaseValues == null) continue;
+                    TileId = t.TileId,
+                    BuildingId = t.BuildingId,
+                    Position = t.Position,
+                    Connected = t.Connected,
+                    Inactive = t.Inactive,
+                    OverlapInvalid = t.OverlapInvalid
+                });
 
-                    float connectionRadius = GetConnectionRadius(b);
-                    var v = b.BaseValues;
-
-                    // One connection per hub in range — a building in range of multiple hubs gets multiple connections
-                    for (int i = 0; i < hubCount; i++)
+                if (t.Inactive) continue;
+                if (t.RoadConnections == null) continue;
+                foreach (var rc in t.RoadConnections)
+                {
+                    _activeRoadConnections.Add(new TileRoadConnection
                     {
-                        float dist = Vector2.Distance(t.Position, hubPositions[i]);
-                        if (dist > connectionRadius) continue;
-
-                        _activeConnections.Add(new TileHubConnection { TileId = t.TileId, HubIndex = i });
-
-                        float radialDist = Mathf.Max(dist, epsilonDistance);
-                        float pop = hubPopulations[i];
-                        float scale = pop / radialDist;
-
-                        hubEnv[i] += v.environment * scale;
-                        hubEco[i] += v.economy * scale;
-                        hubSaf[i] += v.healthSafety * scale;
-                        hubCul[i] += v.cultureEdu * scale;
-                    }
+                        TileId = t.TileId,
+                        SnapPoint = rc.Position,
+                        Distance = rc.Distance
+                    });
                 }
             }
-            else
+
+            // --- Standard metrics ---
+            // Both paths now gate on road connectivity: unconnected buildings contribute nothing.
+            foreach (var t in _placedTiles)
             {
-                foreach (var t in _placedTiles)
+                if (t.Inactive || t.OverlapInvalid || !t.Connected) continue;
+                var b = GetBuilding(t.BuildingId);
+                if (b == null || b.BaseValues == null) continue;
+
+                float connectionRadius = GetConnectionRadius(b);
+                var v = b.BaseValues;
+
+                for (int i = 0; i < hubCount; i++)
                 {
-                    if (t.Inactive || t.OverlapInvalid) continue;
-                    float distToRoad = _transitGraph.DistanceToNearestSegment(t.Position);
-                    bool roadConnected = distToRoad <= _roadConnectRange;
+                    float dist = Vector2.Distance(t.Position, hubPositions[i]);
+                    if (dist > connectionRadius) continue;
 
-                    var b = GetBuilding(t.BuildingId);
-                    if (b == null || b.BaseValues == null) continue;
+                    _activeConnections.Add(new TileHubConnection { TileId = t.TileId, HubIndex = i });
 
-                    float connectionRadius = GetConnectionRadius(b);
-                    var v = b.BaseValues;
+                    float normalizedDist = dist / connectionRadius;
+                    float influence = 1f - (normalizedDist * normalizedDist);
 
-                    // One connection per hub in range — a building in range of multiple hubs gets multiple connections
-                    for (int i = 0; i < hubCount; i++)
-                    {
-                        float dist = Vector2.Distance(t.Position, hubPositions[i]);
-                        if (dist > connectionRadius) continue;
-
-                        _activeConnections.Add(new TileHubConnection { TileId = t.TileId, HubIndex = i });
-
-                        // Legacy scoring requires road connection; visuals (ActiveConnections) do not.
-                        if (!roadConnected) continue;
-
-                        float normalizedDist = dist / connectionRadius;
-                        float influence = 1f - (normalizedDist * normalizedDist);
-
-                        hubEnv[i] += v.environment * influence;
-                        hubEco[i] += v.economy * influence;
-                        hubSaf[i] += v.healthSafety * influence;
-                        hubCul[i] += v.cultureEdu * influence;
-                    }
+                    hubEnv[i] += v.environment * influence;
+                    hubEco[i] += v.economy * influence;
+                    hubSaf[i] += v.healthSafety * influence;
+                    hubCul[i] += v.cultureEdu * influence;
                 }
             }
 
@@ -297,7 +333,7 @@ namespace CityTwin.Simulation
 
             foreach (var t in _placedTiles)
             {
-                if (t.Inactive || t.OverlapInvalid) continue;
+                if (t.Inactive || t.OverlapInvalid || !t.Connected) continue;
                 var b = GetBuilding(t.BuildingId);
                 if (b == null) continue;
 
@@ -387,7 +423,7 @@ namespace CityTwin.Simulation
                 string hubInfo = "";
                 for (int i = 0; i < hubCount; i++)
                     hubInfo += $" hub{i}=({hubPositions[i].x:F1},{hubPositions[i].y:F1}) pop={hubPopulations[i]:F1}";
-                //Debug.Log($"[Metrics] QOL={_qol:F0} | Env={_environment:F1} Eco={_economy:F1} Safe={_healthSafety:F1} Cul={_cultureEdu:F1} Access={_accessibility:F1} | tiles={_placedTiles.Count} conns={_activeConnections.Count}{posInfo} |{hubInfo}");
+                Debug.Log($"[Metrics] QOL={_qol:F0} | Env={_environment:F1} Eco={_economy:F1} Safe={_healthSafety:F1} Cul={_cultureEdu:F1} Access={_accessibility:F1} | tiles={_placedTiles.Count} conns={_activeConnections.Count} roadConns={_activeRoadConnections.Count}{posInfo} |{hubInfo}");
             }
 
             OnMetricsChanged?.Invoke();
@@ -427,6 +463,8 @@ namespace CityTwin.Simulation
             public float Rotation;
             public bool Inactive;
             public bool OverlapInvalid;
+            public bool Connected;
+            public List<TransitGraph.ConnectionPoint> RoadConnections;
         }
     }
 }

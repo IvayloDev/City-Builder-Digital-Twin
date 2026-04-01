@@ -41,7 +41,7 @@ public class MouseBuildingTester : MonoBehaviour
     [SerializeField] private bool enableBackquotePicker = true;
     [SerializeField] private Key togglePickerKey = Key.Backquote;
     [SerializeField] private bool pauseInputWhilePickerOpen = true;
-    [SerializeField] private float pickerUiScale = 10f;
+    [SerializeField] private float pickerUiScale = 1f;
 
     private class ActiveTile
     {

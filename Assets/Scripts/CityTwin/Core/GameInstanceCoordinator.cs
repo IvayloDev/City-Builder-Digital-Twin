@@ -23,6 +23,8 @@ namespace CityTwin.Core
         [SerializeField] private HubConnectionRenderer hubConnectionRenderer;
         [Tooltip("Optional. Validates building overlap against buildings and hubs using visual radii.")]
         [SerializeField] private PlacementOverlapValidator placementOverlapValidator;
+        [Tooltip("Optional. Renders transit graph edges as road lines on the map.")]
+        [SerializeField] private RoadNetworkRenderer roadNetworkRenderer;
 
         private readonly Dictionary<string, string> _oscToEngineTileId = new Dictionary<string, string>();
 
@@ -46,6 +48,7 @@ namespace CityTwin.Core
         {
             if (buildingSpawner == null) buildingSpawner = GetComponentInChildren<BuildingSpawner>(true);
             if (placementOverlapValidator == null) placementOverlapValidator = GetComponentInChildren<PlacementOverlapValidator>(true);
+            if (roadNetworkRenderer == null) roadNetworkRenderer = GetComponentInChildren<RoadNetworkRenderer>(true);
             if (configLoader != null && configLoader.Config != null)
             {
                 var cfg = configLoader.Config;
@@ -86,10 +89,67 @@ namespace CityTwin.Core
 
         private void Start()
         {
-            // Run once after all Awake/OnEnable calls so hub/content references are stable.
             ApplyRegistryHubsToSimulation();
             placementOverlapValidator?.RefreshHubFootprints();
+            roadNetworkRenderer?.RenderRoads();
             simulationEngine?.RecalculateMetrics();
+
+            LogStartupDiagnostics();
+        }
+
+        private void LogStartupDiagnostics()
+        {
+            Debug.Log($"[Coordinator:Startup] simulationEngine={simulationEngine != null} buildingSpawner={buildingSpawner != null} " +
+                      $"tileTracking={tileTracking != null} configLoader={configLoader != null} hubRegistry={hubRegistry != null} " +
+                      $"overlapValidator={placementOverlapValidator != null} connectionRenderer={hubConnectionRenderer != null}");
+            Debug.Log($"[Coordinator:Startup] Budget={Budget}");
+
+            if (buildingSpawner != null && buildingSpawner.ContentRoot != null)
+            {
+                var cr = buildingSpawner.ContentRoot;
+                Debug.Log($"[Coordinator:Startup] ContentRoot rect=({cr.rect.width:F0}x{cr.rect.height:F0}) pivot=({cr.pivot.x:F2},{cr.pivot.y:F2})");
+            }
+            else
+                Debug.LogWarning("[Coordinator:Startup] ContentRoot is NULL — TUIO mapping will fail!");
+
+            if (simulationEngine != null)
+            {
+                var graph = simulationEngine.TransitGraph;
+                Debug.Log($"[Coordinator:Startup] TransitGraph nodes={graph.Nodes.Count} edges={graph.Edges.Count}");
+                for (int i = 0; i < graph.Nodes.Count; i++)
+                {
+                    var n = graph.Nodes[i];
+                    Debug.Log($"[Coordinator:Startup]   Node[{i}] pos=({n.Position.x:F1},{n.Position.y:F1}) pop={n.Population:F0}");
+                }
+                for (int i = 0; i < graph.Edges.Count; i++)
+                {
+                    var e = graph.Edges[i];
+                    Debug.Log($"[Coordinator:Startup]   Edge[{i}] {e.FromId}->{e.ToId} len={e.Length:F1}");
+                }
+            }
+
+            if (hubRegistry != null && hubRegistry.IsValid)
+            {
+                var hubs = hubRegistry.Hubs;
+                for (int i = 0; i < hubs.Count; i++)
+                {
+                    var h = hubs[i];
+                    Vector2 contentPos = buildingSpawner != null
+                        ? buildingSpawner.WorldToContentLocal(h.transform.position)
+                        : h.Position2D;
+                    Debug.Log($"[Coordinator:Startup]   Hub[{i}] worldPos={h.transform.position} contentLocal=({contentPos.x:F1},{contentPos.y:F1}) pop={h.Population:F0}");
+                }
+            }
+            else
+                Debug.LogWarning("[Coordinator:Startup] HubRegistry is null or invalid — no scoring hubs!");
+
+            if (configLoader?.Config?.Buildings != null)
+            {
+                Debug.Log($"[Coordinator:Startup] BuildingCatalog has {configLoader.Config.Buildings.Length} entries: " +
+                          string.Join(", ", System.Array.ConvertAll(configLoader.Config.Buildings, b => b.Id)));
+            }
+            else
+                Debug.LogWarning("[Coordinator:Startup] No building catalog loaded!");
         }
 
         private void OnDisable()
@@ -140,7 +200,6 @@ namespace CityTwin.Core
             if (hubRegistry == null) hubRegistry = GetComponentInChildren<HubRegistry>(true);
             if (hubRegistry == null) return;
 
-            // Refresh explicitly to avoid script execution order races on scene load.
             hubRegistry.FetchHubs();
 
             var hubs = new List<(Vector2 position, float population)>();
@@ -156,6 +215,37 @@ namespace CityTwin.Core
             }
 
             simulationEngine.SetScoringHubs(hubs);
+
+            if (hubs.Count >= 2)
+                RebuildTransitGraphFromHubs(hubs);
+        }
+
+        /// <summary>
+        /// Build a transit graph using the actual hub positions in content-local space.
+        /// Connects each hub to every other hub so buildings anywhere on the map can
+        /// snap to a nearby road segment. This replaces the config-based graph whose
+        /// small (-90..90) coordinates don't match the real scene layout.
+        /// </summary>
+        private void RebuildTransitGraphFromHubs(List<(Vector2 position, float population)> hubs)
+        {
+            if (simulationEngine == null || hubs.Count < 2) return;
+
+            var graph = new TransitGraph();
+            for (int i = 0; i < hubs.Count; i++)
+                graph.AddNode(hubs[i].position, hubs[i].population);
+
+            for (int i = 0; i < hubs.Count; i++)
+            {
+                for (int j = i + 1; j < hubs.Count; j++)
+                {
+                    float dist = Vector2.Distance(hubs[i].position, hubs[j].position);
+                    graph.AddEdge(i, j, dist);
+                    graph.AddEdge(j, i, dist);
+                }
+            }
+
+            simulationEngine.SetTransitGraph(graph);
+            Debug.Log($"[Coordinator] Rebuilt transit graph from {hubs.Count} hub positions ({graph.Edges.Count} edges)");
         }
 
         /// <summary>Build transit graph from config map (nodes + edges). Node positions are treated as content root local space.</summary>
@@ -224,6 +314,8 @@ namespace CityTwin.Core
                 : pose.Position * tableScale;
             var simPose = new TilePose(simPos, pose.Rotation, pose.BuildingId, pose.SourceId, pose.TileId);
 
+            Debug.Log($"[Coordinator:TileUpdate] tileId={pose.TileId} building={pose.BuildingId} tuioPos=({pose.Position.x:F3},{pose.Position.y:F3}) → simPos=({simPos.x:F1},{simPos.y:F1})");
+
             if (_oscToEngineTileId.TryGetValue(pose.TileId, out string engineId))
             {
                 buildingSpawner?.MoveBuilding(pose, engineId);
@@ -234,13 +326,15 @@ namespace CityTwin.Core
                                 placementOverlapValidator.IsOverlapping(engineId, simPose.Position, radius);
 
                 simulationEngine.UpdateTilePosition(engineId, simPose.Position, simPose.Rotation, overlaps);
+                bool connected = simulationEngine.IsTileConnected(engineId);
+                Debug.Log($"[Coordinator:MoveExisting] engineId={engineId} overlap={overlaps} connected={connected} simPos=({simPos.x:F1},{simPos.y:F1})");
+
                 placementOverlapValidator?.UpsertTile(engineId, simPose.Position, radius, overlaps);
                 placementOverlapValidator?.SetTileVisualInvalid(engineId, overlaps);
-                //Debug.Log($"[Coordinator] Move tile {engineId} → simPos=({simPose.Position.x:F0},{simPose.Position.y:F0})");
+                UpdateMarkerConnectionState(engineId, overlaps);
                 return;
             }
 
-            //Debug.Log($"[Coordinator] OnTileUpdated (new) buildingId={pose.BuildingId} budget={Budget}");
             int price = 0;
             if (configLoader?.Config?.Buildings != null)
             {
@@ -252,27 +346,62 @@ namespace CityTwin.Core
             float candidateRadius = placementOverlapValidator != null
                 ? placementOverlapValidator.ResolveRadiusForBuilding(simPose.BuildingId)
                 : 24f;
-            if (placementOverlapValidator != null &&
-                placementOverlapValidator.IsOverlapping(null, simPose.Position, candidateRadius))
+            bool initialOverlap = placementOverlapValidator != null &&
+                placementOverlapValidator.IsOverlapping(null, simPose.Position, candidateRadius);
+
+            Debug.Log($"[Coordinator:NewTile] building={pose.BuildingId} price={price} budget={Budget} overlap={initialOverlap} candidateRadius={candidateRadius:F1}");
+
+            if (initialOverlap)
             {
+                Debug.Log($"[Coordinator:NewTile] BLOCKED — overlapping another building or hub at ({simPos.x:F1},{simPos.y:F1}).");
                 return;
             }
-            if (price > 0 && Budget < price) { Debug.Log($"[Coordinator] Not enough budget: need {price}, have {Budget}. Skipping."); return; }
+            if (price > 0 && Budget < price) { Debug.LogWarning($"[Coordinator:NewTile] BLOCKED — not enough budget: need {price}, have {Budget}."); return; }
             if (price > 0) Budget -= price;
             engineId = simulationEngine.AddTile(simPose);
-            //Debug.Log($"[Coordinator] AddTile returned engineId={engineId ?? "(null)"}");
-            if (!string.IsNullOrEmpty(pose.TileId) && !string.IsNullOrEmpty(engineId))
-                _oscToEngineTileId[pose.TileId] = engineId;
-            if (buildingSpawner == null) Debug.LogWarning("[Coordinator] buildingSpawner is null, no visual will be spawned.");
-            if (!string.IsNullOrEmpty(engineId))
+
+            if (string.IsNullOrEmpty(engineId))
             {
-                buildingSpawner?.SpawnBuilding(pose, engineId);
-                float placedRadius = placementOverlapValidator != null
-                    ? placementOverlapValidator.ResolveRadiusForTile(engineId, simPose.BuildingId)
-                    : candidateRadius;
-                placementOverlapValidator?.UpsertTile(engineId, simPose.Position, placedRadius, false);
-                placementOverlapValidator?.SetTileVisualInvalid(engineId, false);
+                Debug.LogWarning($"[Coordinator:NewTile] BLOCKED — SimulationEngine.AddTile returned null for building '{pose.BuildingId}'. " +
+                                 "Building not in catalog? Check classId→buildingId mapping.");
+                return;
             }
+
+            if (!string.IsNullOrEmpty(pose.TileId))
+                _oscToEngineTileId[pose.TileId] = engineId;
+            if (buildingSpawner == null) Debug.LogWarning("[Coordinator:NewTile] buildingSpawner is null, no visual will be spawned.");
+
+            buildingSpawner?.SpawnBuilding(pose, engineId);
+            float placedRadius = placementOverlapValidator != null
+                ? placementOverlapValidator.ResolveRadiusForTile(engineId, simPose.BuildingId)
+                : candidateRadius;
+            placementOverlapValidator?.UpsertTile(engineId, simPose.Position, placedRadius, false);
+            placementOverlapValidator?.SetTileVisualInvalid(engineId, false);
+            UpdateMarkerConnectionState(engineId, false);
+
+            bool isConnected = simulationEngine.IsTileConnected(engineId);
+            Debug.Log($"[Coordinator:NewTile] PLACED engineId={engineId} connected={isConnected} budgetLeft={Budget}");
+
+            simulationEngine.RecalculateMetrics();
+        }
+
+        private void UpdateMarkerConnectionState(string engineId, bool overlapInvalid)
+        {
+            if (buildingSpawner == null || simulationEngine == null) return;
+
+            bool inactive = simulationEngine.IsTileInactive(engineId);
+            bool connected = simulationEngine.IsTileConnected(engineId);
+
+            MarkerConnectionState state;
+            if (inactive)
+                state = MarkerConnectionState.Inactive;
+            else if (!connected)
+                state = MarkerConnectionState.Disconnected;
+            else
+                state = MarkerConnectionState.Connected;
+
+            Debug.Log($"[Coordinator:MarkerState] engineId={engineId} inactive={inactive} connected={connected} overlap={overlapInvalid} → {state}");
+            buildingSpawner.SetMarkerConnectionState(engineId, state);
         }
 
         private void OnTileRemoved(string oscTileId)

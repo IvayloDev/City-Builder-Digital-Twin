@@ -125,17 +125,64 @@ namespace CityTwin.Simulation
             return _edges.Count == 0 ? float.MaxValue : best;
         }
 
-        private static float DistancePointToSegment(Vector2 p, Vector2 a, Vector2 b)
+        public struct ConnectionPoint
+        {
+            public Vector2 Position;
+            public float Distance;
+            public int EdgeIndex;
+        }
+
+        /// <summary>Find all road segment snap-points within range of buildingPos, deduplicated by 20-unit threshold.</summary>
+        public List<ConnectionPoint> GetRoadConnections(Vector2 buildingPos, float range)
+        {
+            var results = new List<ConnectionPoint>();
+            const float deduplicationThreshold = 20f;
+
+            for (int i = 0; i < _edges.Count; i++)
+            {
+                var e = _edges[i];
+                var a = GetNode(e.FromId).Position;
+                var b = GetNode(e.ToId).Position;
+                Vector2 closest = ClosestPointOnSegment(buildingPos, a, b);
+                float dist = Vector2.Distance(buildingPos, closest);
+
+                if (dist >= range) continue;
+
+                bool isDuplicate = false;
+                for (int j = 0; j < results.Count; j++)
+                {
+                    if (Vector2.Distance(results[j].Position, closest) < deduplicationThreshold)
+                    {
+                        isDuplicate = true;
+                        break;
+                    }
+                }
+                if (isDuplicate) continue;
+
+                results.Add(new ConnectionPoint
+                {
+                    Position = closest,
+                    Distance = dist,
+                    EdgeIndex = i
+                });
+            }
+
+            results.Sort((x, y) => x.Distance.CompareTo(y.Distance));
+            return results;
+        }
+
+        public static Vector2 ClosestPointOnSegment(Vector2 p, Vector2 a, Vector2 b)
         {
             Vector2 v = b - a;
-            Vector2 w = p - a;
-            float c1 = Vector2.Dot(w, v);
             float c2 = Vector2.Dot(v, v);
-            if (c2 <= 0.0001f) return Vector2.Distance(p, a);
-            if (c1 <= 0) return Vector2.Distance(p, a);
-            if (c1 >= c2) return Vector2.Distance(p, b);
-            float t = c1 / c2;
-            Vector2 closest = a + t * v;
+            if (c2 <= 0.0001f) return a;
+            float t = Mathf.Clamp01(Vector2.Dot(p - a, v) / c2);
+            return a + t * v;
+        }
+
+        private static float DistancePointToSegment(Vector2 p, Vector2 a, Vector2 b)
+        {
+            Vector2 closest = ClosestPointOnSegment(p, a, b);
             return Vector2.Distance(p, closest);
         }
     }

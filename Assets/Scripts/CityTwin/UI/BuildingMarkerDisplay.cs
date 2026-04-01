@@ -5,6 +5,13 @@ using CityTwin.Localization;
 
 namespace CityTwin.UI
 {
+    public enum MarkerConnectionState
+    {
+        Connected,
+        Disconnected,
+        Inactive
+    }
+
     /// <summary>Optional: put on the building marker prefab to show building name/icon. BuildingSpawner will call SetBuilding after spawn.</summary>
     public class BuildingMarkerDisplay : MonoBehaviour
     {
@@ -21,11 +28,15 @@ namespace CityTwin.UI
         [Tooltip("Fallback halo radius used when no halo image/rect is available.")]
         [SerializeField] private float fallbackHaloRadius = 24f;
 
+        private static readonly Color DisconnectedColor = new Color(1f, 0f, 0.4f, 0.95f); // #ff0066
+        private static readonly Color InactiveColor = new Color(0.4f, 0.4f, 0.4f, 0.95f);  // #666
+
         private string _currentBuildingId;
         private bool _isPlacementInvalid;
         private Color _invalidHaloColor = Color.red;
         private Color _configuredHaloColor = Color.white;
         private bool _hasConfiguredHaloColor;
+        private MarkerConnectionState _connectionState = MarkerConnectionState.Connected;
 
         private void Awake()
         {
@@ -95,6 +106,12 @@ namespace CityTwin.UI
         {
             _isPlacementInvalid = isInvalid;
             _invalidHaloColor = invalidColor;
+            ApplyHaloColorState();
+        }
+
+        public void SetConnectionState(MarkerConnectionState state)
+        {
+            _connectionState = state;
             ApplyHaloColorState();
         }
 
@@ -178,14 +195,25 @@ namespace CityTwin.UI
         private void ApplyHaloColorState()
         {
             if (haloImage == null) return;
+
             if (_isPlacementInvalid)
             {
                 haloImage.color = _invalidHaloColor;
                 return;
             }
 
-            if (_hasConfiguredHaloColor)
-                haloImage.color = _configuredHaloColor;
+            switch (_connectionState)
+            {
+                case MarkerConnectionState.Inactive:
+                    haloImage.color = InactiveColor;
+                    return;
+                case MarkerConnectionState.Disconnected:
+                    haloImage.color = DisconnectedColor;
+                    return;
+                default:
+                    haloImage.color = _hasConfiguredHaloColor ? _configuredHaloColor : Color.white;
+                    return;
+            }
         }
     }
 }

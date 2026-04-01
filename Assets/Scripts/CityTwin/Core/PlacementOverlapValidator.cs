@@ -13,8 +13,12 @@ namespace CityTwin.Core
         [SerializeField] private BuildingSpawner buildingSpawner;
         [SerializeField] private HubRegistry hubRegistry;
         [SerializeField] private Color invalidHaloColor = new Color(1f, 0.25f, 0.25f, 0.95f);
-        [SerializeField] private float fallbackBuildingRadius = 24f;
-        [SerializeField] private float fallbackHubRadius = 28f;
+        [Tooltip("Minimum distance between two building centers to avoid overlap.")]
+        [SerializeField] private float buildingCollisionDistance = 80f;
+        [Tooltip("Minimum distance from a building center to a hub center to avoid overlap.")]
+        [SerializeField] private float hubCollisionDistance = 100f;
+        [SerializeField] private float fallbackBuildingRadius = 40f;
+        [SerializeField] private float fallbackHubRadius = 50f;
 
         private struct TileFootprint
         {
@@ -78,25 +82,21 @@ namespace CityTwin.Core
 
         public bool IsOverlapping(string movingTileIdOrNull, Vector2 candidatePosition, float candidateRadius)
         {
-            float safeRadius = Mathf.Max(1f, candidateRadius);
-            float minSqrDist;
+            float bldgSqr = buildingCollisionDistance * buildingCollisionDistance;
+            float hubSqr = hubCollisionDistance * hubCollisionDistance;
 
             foreach (var kv in _tileFootprints)
             {
                 if (!string.IsNullOrEmpty(movingTileIdOrNull) && kv.Key == movingTileIdOrNull)
                     continue;
 
-                float sum = safeRadius + Mathf.Max(1f, kv.Value.radius);
-                minSqrDist = sum * sum;
-                if ((candidatePosition - kv.Value.position).sqrMagnitude < minSqrDist)
+                if ((candidatePosition - kv.Value.position).sqrMagnitude < bldgSqr)
                     return true;
             }
 
             for (int i = 0; i < _hubFootprints.Count; i++)
             {
-                float sum = safeRadius + Mathf.Max(1f, _hubFootprints[i].radius);
-                minSqrDist = sum * sum;
-                if ((candidatePosition - _hubFootprints[i].position).sqrMagnitude < minSqrDist)
+                if ((candidatePosition - _hubFootprints[i].position).sqrMagnitude < hubSqr)
                     return true;
             }
 

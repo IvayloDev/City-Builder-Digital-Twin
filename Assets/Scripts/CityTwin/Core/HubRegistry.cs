@@ -52,7 +52,6 @@ namespace CityTwin.Core
             }
 
             _validated = true;
-            Debug.Log($"[HubRegistry] Found {_hubs.Count} hubs: {string.Join(", ", _hubs.Select(h => $"{h.HubId}={h.Population:N0}"))}");
         }
     }
 }
