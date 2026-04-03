@@ -4,112 +4,112 @@ using TMPro;
 using CityTwin.Core;
 using CityTwin.Simulation;
 
-namespace CityTwin.UI
+/// <summary>Per-instance dashboard: metric bars, QOL, timer, budget. Bind to SimulationEngine, SessionTimer, and budget source. No statics.</summary>
+public class DashboardController : MonoBehaviour
 {
-    /// <summary>Per-instance dashboard: metric bars, QOL, timer, budget. Bind to SimulationEngine, SessionTimer, and budget source. No statics.</summary>
-    public class DashboardController : MonoBehaviour
+    [Header("Data sources")]
+    [SerializeField] private SimulationEngine simulationEngine;
+    [SerializeField] private SessionTimer sessionTimer;
+    [SerializeField] private GameInstanceCoordinator coordinator;
+
+    [Header("Top bar")]
+    [SerializeField] private TextMeshProUGUI timerText;
+    [SerializeField] private TextMeshProUGUI budgetText;
+    [SerializeField] private TextMeshProUGUI qolText;
+    [SerializeField] private RoundedRadialFill qolRadialFill;
+
+    [Header("Metric bars (fill 0-1)")]
+    [SerializeField] private CurvedBarFill environmentFill;
+    [SerializeField] private CurvedBarFill economyFill;
+    [SerializeField] private CurvedBarFill healthSafetyFill;
+    [SerializeField] private CurvedBarFill cultureEduFill;
+    [SerializeField] private CurvedBarFill accessibilityFill;
+
+    [Header("Metric percentage texts (optional)")]
+    [SerializeField] private TextMeshProUGUI environmentText;
+    [SerializeField] private TextMeshProUGUI economyText;
+    [SerializeField] private TextMeshProUGUI healthSafetyText;
+    [SerializeField] private TextMeshProUGUI cultureEduText;
+    [SerializeField] private TextMeshProUGUI accessText;
+
+    [Tooltip("Scale raw metrics to fill (e.g. 0.05 = 1/20).")]
+    [SerializeField] private float metricFillScale = 0.05f;
+    [Tooltip("Smooth metric bar changes (0 = instant).")]
+    [SerializeField] private float metricSmoothTime = 0.3f;
+
+    private float _displayQol;
+    private float _displayEnv, _displayEco, _displaySaf, _displayCul, _displayAcc;
+
+    private void ResetMetricUI()
     {
-        [Header("Data sources")]
-        [SerializeField] private SimulationEngine simulationEngine;
-        [SerializeField] private SessionTimer sessionTimer;
-        [SerializeField] private GameInstanceCoordinator coordinator;
+        _displayQol = _displayEnv = _displayEco = _displaySaf = _displayCul = _displayAcc = 0f;
 
-        [Header("Top bar")]
-        [SerializeField] private TextMeshProUGUI timerText;
-        [SerializeField] private TextMeshProUGUI budgetText;
-        [SerializeField] private TextMeshProUGUI qolText;
-        [SerializeField] private TextMeshProUGUI accessText;
+        if (qolText != null) qolText.text = "0";
+        if (accessText != null) accessText.text = "0%";
+        if (environmentText != null) environmentText.text = "0%";
+        if (economyText != null) economyText.text = "0%";
+        if (healthSafetyText != null) healthSafetyText.text = "0%";
+        if (cultureEduText != null) cultureEduText.text = "0%";
 
-        [Header("Metric bars (fill 0-1)")]
-        [SerializeField] private Image environmentFill;
-        [SerializeField] private Image economyFill;
-        [SerializeField] private Image healthSafetyFill;
-        [SerializeField] private Image cultureEduFill;
-        [SerializeField] private Image accessibilityFill;
+        if (environmentFill != null) environmentFill.fill = 0f;
+        if (economyFill != null) economyFill.fill = 0f;
+        if (healthSafetyFill != null) healthSafetyFill.fill = 0f;
+        if (cultureEduFill != null) cultureEduFill.fill = 0f;
+        if (accessibilityFill != null) accessibilityFill.fill = 0f;
+        if (qolRadialFill != null) qolRadialFill.fill = 0f;
+    }
 
-        [Header("Metric percentage texts (optional)")]
-        [SerializeField] private TextMeshProUGUI environmentText;
-        [SerializeField] private TextMeshProUGUI economyText;
-        [SerializeField] private TextMeshProUGUI healthSafetyText;
-        [SerializeField] private TextMeshProUGUI cultureEduText;
+    private void Awake()
+    {
+        if (simulationEngine == null) simulationEngine = GetComponentInChildren<SimulationEngine>(true);
+        if (sessionTimer == null) sessionTimer = GetComponentInChildren<SessionTimer>(true);
+        if (coordinator == null) coordinator = GetComponentInChildren<GameInstanceCoordinator>(true);
+    }
 
-        [Tooltip("Scale raw metrics to fill (e.g. 0.05 = 1/20).")]
-        [SerializeField] private float metricFillScale = 0.05f;
-        [Tooltip("Smooth metric bar changes (0 = instant).")]
-        [SerializeField] private float metricSmoothTime = 0.3f;
+    private void OnEnable()
+    {
+        // Ensure dashboard starts from empty values before any metrics arrive.
+        ResetMetricUI();
 
-        private float _displayQol;
-        private float _displayEnv, _displayEco, _displaySaf, _displayCul, _displayAcc;
+        if (simulationEngine != null)
+            simulationEngine.OnMetricsChanged += RefreshMetrics;
+    }
 
-        private void ResetMetricUI()
-        {
-            _displayQol = _displayEnv = _displayEco = _displaySaf = _displayCul = _displayAcc = 0f;
+    private void OnDisable()
+    {
+        if (simulationEngine != null)
+            simulationEngine.OnMetricsChanged -= RefreshMetrics;
+    }
 
-            if (qolText != null) qolText.text = "0";
-            if (accessText != null) accessText.text = "0%";
-            if (environmentText != null) environmentText.text = "0%";
-            if (economyText != null) economyText.text = "0%";
-            if (healthSafetyText != null) healthSafetyText.text = "0%";
-            if (cultureEduText != null) cultureEduText.text = "0%";
+    private void Update()
+    {
+        if (sessionTimer != null && timerText != null)
+            timerText.text = sessionTimer.FormatTime();
+        if (coordinator != null && budgetText != null)
+            budgetText.text = coordinator.Budget.ToString();
+    }
 
-            if (environmentFill != null) environmentFill.fillAmount = 0f;
-            if (economyFill != null) economyFill.fillAmount = 0f;
-            if (healthSafetyFill != null) healthSafetyFill.fillAmount = 0f;
-            if (cultureEduFill != null) cultureEduFill.fillAmount = 0f;
-            if (accessibilityFill != null) accessibilityFill.fillAmount = 0f;
-        }
-
-        private void Awake()
-        {
-            if (simulationEngine == null) simulationEngine = GetComponentInChildren<SimulationEngine>(true);
-            if (sessionTimer == null) sessionTimer = GetComponentInChildren<SessionTimer>(true);
-            if (coordinator == null) coordinator = GetComponentInChildren<GameInstanceCoordinator>(true);
-        }
-
-        private void OnEnable()
-        {
-            // Ensure dashboard starts from empty values before any metrics arrive.
-            ResetMetricUI();
-
-            if (simulationEngine != null)
-                simulationEngine.OnMetricsChanged += RefreshMetrics;
-        }
-
-        private void OnDisable()
-        {
-            if (simulationEngine != null)
-                simulationEngine.OnMetricsChanged -= RefreshMetrics;
-        }
-
-        private void Update()
-        {
-            if (sessionTimer != null && timerText != null)
-                timerText.text = sessionTimer.FormatTime();
-            if (coordinator != null && budgetText != null)
-                budgetText.text = coordinator.Budget.ToString();
-        }
-
-        private void RefreshMetrics()
-        {
-            if (simulationEngine == null) return;
-            float dt = metricSmoothTime > 0 ? Time.deltaTime / metricSmoothTime : 1f;
-            _displayQol = Mathf.Lerp(_displayQol, simulationEngine.Qol, dt);
-            _displayEnv = Mathf.Lerp(_displayEnv, simulationEngine.Environment, dt);
-            _displayEco = Mathf.Lerp(_displayEco, simulationEngine.Economy, dt);
-            _displaySaf = Mathf.Lerp(_displaySaf, simulationEngine.HealthSafety, dt);
-            _displayCul = Mathf.Lerp(_displayCul, simulationEngine.CultureEdu, dt);
-            _displayAcc = Mathf.Lerp(_displayAcc, simulationEngine.Accessibility, dt);
-            if (qolText != null) qolText.text = Mathf.RoundToInt(_displayQol).ToString();
-            if (accessText != null) accessText.text = $"{Mathf.RoundToInt(_displayAcc)}%";
-            if (environmentText != null) environmentText.text = $"{Mathf.RoundToInt(_displayEnv)}%";
-            if (economyText != null) economyText.text = $"{Mathf.RoundToInt(_displayEco)}%";
-            if (healthSafetyText != null) healthSafetyText.text = $"{Mathf.RoundToInt(_displaySaf)}%";
-            if (cultureEduText != null) cultureEduText.text = $"{Mathf.RoundToInt(_displayCul)}%";
-            if (environmentFill != null) environmentFill.fillAmount = Mathf.Clamp01(_displayEnv * metricFillScale);
-            if (economyFill != null) economyFill.fillAmount = Mathf.Clamp01(_displayEco * metricFillScale);
-            if (healthSafetyFill != null) healthSafetyFill.fillAmount = Mathf.Clamp01(_displaySaf * metricFillScale);
-            if (cultureEduFill != null) cultureEduFill.fillAmount = Mathf.Clamp01(_displayCul * metricFillScale);
-            if (accessibilityFill != null) accessibilityFill.fillAmount = Mathf.Clamp01(_displayAcc * metricFillScale);
-        }
+    private void RefreshMetrics()
+    {
+        if (simulationEngine == null) return;
+        float dt = metricSmoothTime > 0 ? Time.deltaTime / metricSmoothTime : 1f;
+        _displayQol = Mathf.Lerp(_displayQol, simulationEngine.Qol, dt);
+        _displayEnv = Mathf.Lerp(_displayEnv, simulationEngine.Environment, dt);
+        _displayEco = Mathf.Lerp(_displayEco, simulationEngine.Economy, dt);
+        _displaySaf = Mathf.Lerp(_displaySaf, simulationEngine.HealthSafety, dt);
+        _displayCul = Mathf.Lerp(_displayCul, simulationEngine.CultureEdu, dt);
+        _displayAcc = Mathf.Lerp(_displayAcc, simulationEngine.Accessibility, dt);
+        if (qolText != null) qolText.text = Mathf.RoundToInt(_displayQol).ToString();
+        if (accessText != null) accessText.text = $"{Mathf.RoundToInt(_displayAcc)}%";
+        if (environmentText != null) environmentText.text = $"{Mathf.RoundToInt(_displayEnv)}%";
+        if (economyText != null) economyText.text = $"{Mathf.RoundToInt(_displayEco)}%";
+        if (healthSafetyText != null) healthSafetyText.text = $"{Mathf.RoundToInt(_displaySaf)}%";
+        if (cultureEduText != null) cultureEduText.text = $"{Mathf.RoundToInt(_displayCul)}%";
+        if (environmentFill != null) environmentFill.fill = Mathf.Clamp01(_displayEnv * metricFillScale);
+        if (economyFill != null) economyFill.fill = Mathf.Clamp01(_displayEco * metricFillScale);
+        if (healthSafetyFill != null) healthSafetyFill.fill = Mathf.Clamp01(_displaySaf * metricFillScale);
+        if (cultureEduFill != null) cultureEduFill.fill = Mathf.Clamp01(_displayCul * metricFillScale);
+        if (accessibilityFill != null) accessibilityFill.fill = Mathf.Clamp01(_displayAcc * metricFillScale);
+        if (qolRadialFill != null) qolRadialFill.fill = Mathf.Clamp01(_displayQol / 100f);
     }
 }

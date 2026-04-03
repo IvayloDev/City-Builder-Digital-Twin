@@ -49,33 +49,11 @@ namespace CityTwin.Core
             if (buildingSpawner == null) buildingSpawner = GetComponentInChildren<BuildingSpawner>(true);
             if (placementOverlapValidator == null) placementOverlapValidator = GetComponentInChildren<PlacementOverlapValidator>(true);
             if (roadNetworkRenderer == null) roadNetworkRenderer = GetComponentInChildren<RoadNetworkRenderer>(true);
-            if (configLoader != null && configLoader.Config != null)
+            if (configLoader != null)
             {
-                var cfg = configLoader.Config;
-                Budget = cfg.Budget?.startingBudget ?? 1000;
-                simulationEngine?.SetBuildingCatalog(new List<BuildingDefinition>(cfg.Buildings ?? System.Array.Empty<BuildingDefinition>()));
-                var acc = cfg.Accessibility;
-                simulationEngine?.SetConfig(
-                    cfg.Scoring.epsilonDistance,
-                    cfg.Scoring.qolCapPerMetric,
-                    acc.walkingDistance,
-                    acc.roadConnectRange,
-                    acc.zoneRadius,
-                    acc.defaultConnectionRadius,
-                    cfg.Scoring.populationScale
-                );
-                if (cfg.Map != null && cfg.Map.nodes != null && cfg.Map.nodes.Length > 0)
-                    BuildTransitGraphFromConfig(cfg.Map);
-                else
-                    BuildDefaultTransitGraphIfNeeded();
-
-                ApplyRegistryHubsToSimulation();
-                placementOverlapValidator?.RefreshHubFootprints();
-            }
-            if (sessionTimer != null && configLoader?.Config != null)
-            {
-                sessionTimer.SetFromConfig(configLoader.Config);
-                sessionTimer.Stop();
+                configLoader.OnConfigLoaded += HandleConfigLoaded;
+                if (configLoader.Config != null)
+                    ApplyConfig(configLoader.Config);
             }
             if (tileTracking != null)
             {
@@ -154,6 +132,8 @@ namespace CityTwin.Core
 
         private void OnDisable()
         {
+            if (configLoader != null)
+                configLoader.OnConfigLoaded -= HandleConfigLoaded;
             if (tileTracking != null)
             {
                 tileTracking.OnTileUpdated -= OnTileUpdated;
@@ -161,6 +141,46 @@ namespace CityTwin.Core
             }
             if (simulationEngine != null)
                 simulationEngine.OnMetricsChanged -= PushHubIndicators;
+        }
+
+        private void HandleConfigLoaded(GameConfig cfg)
+        {
+            if (cfg == null) return;
+            ApplyConfig(cfg);
+            gameInstanceRoot?.ApplyOscConfig(cfg);
+        }
+
+        private void ApplyConfig(GameConfig cfg)
+        {
+            if (cfg == null) return;
+
+            Budget = cfg.Budget?.startingBudget ?? 1000;
+            simulationEngine?.SetBuildingCatalog(new List<BuildingDefinition>(cfg.Buildings ?? System.Array.Empty<BuildingDefinition>()));
+
+            var acc = cfg.Accessibility;
+            simulationEngine?.SetConfig(
+                cfg.Scoring.epsilonDistance,
+                cfg.Scoring.qolCapPerMetric,
+                acc.walkingDistance,
+                acc.roadConnectRange,
+                acc.zoneRadius,
+                acc.defaultConnectionRadius,
+                cfg.Scoring.populationScale
+            );
+
+            if (cfg.Map != null && cfg.Map.nodes != null && cfg.Map.nodes.Length > 0)
+                BuildTransitGraphFromConfig(cfg.Map);
+            else
+                BuildDefaultTransitGraphIfNeeded();
+
+            ApplyRegistryHubsToSimulation();
+            placementOverlapValidator?.RefreshHubFootprints();
+
+            if (sessionTimer != null)
+            {
+                sessionTimer.SetFromConfig(cfg);
+                sessionTimer.Stop();
+            }
         }
 
         /// <summary>

@@ -1,7 +1,9 @@
 using System;
 using System.Collections.Generic;
+using System.Collections;
 using System.IO;
 using UnityEngine;
+using UnityEngine.Networking;
 using CityTwin.Core;
 
 namespace CityTwin.Config
@@ -17,6 +19,19 @@ namespace CityTwin.Config
         [SerializeField] private string configPath = "game_config.json";
 
         private GameConfig _cachedConfig;
+        private bool _isLoading;
+
+        /// <summary>Raised when config is loaded/reloaded successfully.</summary>
+        public event Action<GameConfig> OnConfigLoaded;
+
+        private void Awake()
+        {
+#if UNITY_WEBGL && !UNITY_EDITOR
+            // WebGL cannot read StreamingAssets with System.IO; keep defaults until async web load completes.
+            _cachedConfig = CreateDefaultConfig();
+            BeginWebLoadIfNeeded();
+#endif
+        }
 
         /// <summary>Loaded config (from cache or load). Returns null if load fails.</summary>
         public GameConfig Config
@@ -32,6 +47,10 @@ namespace CityTwin.Config
         /// <summary>Load from StreamingAssets. Uses fallback defaults on missing/valid fields.</summary>
         public bool Load()
         {
+#if UNITY_WEBGL && !UNITY_EDITOR
+            BeginWebLoadIfNeeded();
+            return _cachedConfig != null;
+#else
             string path = Path.Combine(Application.streamingAssetsPath, configPath);
             if (!File.Exists(path))
             {
@@ -40,8 +59,56 @@ namespace CityTwin.Config
                 return false;
             }
             string json = File.ReadAllText(path);
-            return TryParse(json, out _cachedConfig);
+            bool ok = TryParse(json, out var parsed);
+            _cachedConfig = ok ? parsed : CreateDefaultConfig();
+            if (ok)
+                OnConfigLoaded?.Invoke(_cachedConfig);
+            return ok;
+#endif
         }
+
+#if UNITY_WEBGL && !UNITY_EDITOR
+        private void BeginWebLoadIfNeeded()
+        {
+            if (_isLoading) return;
+            StartCoroutine(LoadFromWebGlStreamingAssets());
+        }
+
+        private IEnumerator LoadFromWebGlStreamingAssets()
+        {
+            _isLoading = true;
+            string url = CombineStreamingAssetsUrl(Application.streamingAssetsPath, configPath);
+            using (var req = UnityWebRequest.Get(url))
+            {
+                yield return req.SendWebRequest();
+                if (req.result != UnityWebRequest.Result.Success)
+                {
+                    Debug.LogWarning($"[GameConfigLoader] Config fetch failed: {url} ({req.error}). Using defaults.");
+                    _isLoading = false;
+                    yield break;
+                }
+
+                if (TryParse(req.downloadHandler.text, out var parsed))
+                {
+                    _cachedConfig = parsed;
+                    OnConfigLoaded?.Invoke(_cachedConfig);
+                }
+                else
+                {
+                    _cachedConfig = CreateDefaultConfig();
+                }
+            }
+
+            _isLoading = false;
+        }
+
+        private static string CombineStreamingAssetsUrl(string root, string relativePath)
+        {
+            string normalizedRoot = (root ?? string.Empty).TrimEnd('/', '\\');
+            string normalizedRel = (relativePath ?? string.Empty).TrimStart('/', '\\').Replace("\\", "/");
+            return $"{normalizedRoot}/{normalizedRel}";
+        }
+#endif
 
         /// <summary>Parse JSON string into config. Returns false on parse error (config may be partial/default).</summary>
         /// <remarks>

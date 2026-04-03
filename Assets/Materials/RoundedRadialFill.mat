@@ -7,8 +7,8 @@ Material:
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_Name: CurvedMaterial
-  m_Shader: {fileID: 4800000, guid: 6ec43c5ff15bc44328d0ea1ffd97ee20, type: 3}
+  m_Name: RoundedRadialFill
+  m_Shader: {fileID: 4800000, guid: 177ea770031a28d48b438bf93ed94575, type: 3}
   m_Parent: {fileID: 0}
   m_ModifiedSerializedProperties: 0
   m_ValidKeywords: []
@@ -29,8 +29,8 @@ Material:
         m_Offset: {x: 0, y: 0}
     - _MainTex:
         m_Texture: {fileID: 0}
-        m_Scale: {x: 0.81, y: 1}
-        m_Offset: {x: 0.12, y: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
     - _MaskTex:
         m_Texture: {fileID: 0}
         m_Scale: {x: 1, y: 1}
@@ -42,16 +42,18 @@ Material:
     m_Ints: []
     m_Floats:
     - _ColorMask: 15
-    - _Curve: 0.106
-    - _EdgeFade: 0.0002
     - _EnableExternalAlpha: 0
+    - _EndCapScale: 1.5
+    - _Fill: 0
+    - _RingRadius: 0
+    - _RingThickness: 0.065
+    - _StartAngle: 0
+    - _StartCapScale: 1
     - _Stencil: 0
     - _StencilComp: 8
     - _StencilOp: 0
     - _StencilReadMask: 255
     - _StencilWriteMask: 255
-    - _UseSine: 0
-    - _UseUIAlphaClip: 0
     - _ZWrite: 0
     m_Colors:
     - _Color: {r: 1, g: 1, b: 1, a: 1}

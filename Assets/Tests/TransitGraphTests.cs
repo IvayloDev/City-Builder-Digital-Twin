@@ -1,3 +1,4 @@
+#if UNITY_INCLUDE_TESTS
 using NUnit.Framework;
 using UnityEngine;
 using CityTwin.Simulation;
@@ -53,3 +54,4 @@ namespace CityTwin.Tests
         }
     }
 }
+#endif

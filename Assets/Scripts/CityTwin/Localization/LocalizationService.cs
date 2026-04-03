@@ -34,7 +34,21 @@ namespace CityTwin.Localization
 
         private void OnEnable()
         {
+            if (configLoader != null)
+                configLoader.OnConfigLoaded += HandleConfigLoaded;
             RefreshTable();
+        }
+
+        private void OnDisable()
+        {
+            if (configLoader != null)
+                configLoader.OnConfigLoaded -= HandleConfigLoaded;
+        }
+
+        private void HandleConfigLoaded(GameConfig _)
+        {
+            ReloadFromConfig();
+            OnLanguageChanged?.Invoke();
         }
 
         private void RefreshTable()
