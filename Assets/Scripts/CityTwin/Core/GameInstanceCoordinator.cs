@@ -25,6 +25,8 @@ namespace CityTwin.Core
         [SerializeField] private PlacementOverlapValidator placementOverlapValidator;
         [Tooltip("Optional. Renders transit graph edges as road lines on the map.")]
         [SerializeField] private RoadNetworkRenderer roadNetworkRenderer;
+        [Tooltip("Optional. Manages randomized hub layout presets. Restart will pick a new random preset.")]
+        [SerializeField] private HubLayoutManager hubLayoutManager;
 
         private readonly Dictionary<string, string> _oscToEngineTileId = new Dictionary<string, string>();
 
@@ -42,6 +44,7 @@ namespace CityTwin.Core
             if (simulationEngine == null) simulationEngine = GetComponentInChildren<SimulationEngine>(true);
             if (tileTracking == null) tileTracking = GetComponent<TileTrackingManager>();
             if (sessionTimer == null) sessionTimer = GetComponentInChildren<SessionTimer>(true);
+            if (hubLayoutManager == null) hubLayoutManager = GetComponentInChildren<HubLayoutManager>(true);
         }
 
         private void OnEnable()
@@ -214,6 +217,40 @@ namespace CityTwin.Core
             return true;
         }
 
+        /// <summary>
+        /// Local per-instance restart. Clears all placed tiles, resets budget, picks a new
+        /// random hub layout preset, rebuilds the transit graph, and restarts the session timer.
+        /// Does NOT reload the scene — other game instances are unaffected.
+        /// </summary>
+        public void RestartGame()
+        {
+            Debug.Log($"[Coordinator] RestartGame requested for instance {gameInstanceRoot?.InstanceId ?? -1}");
+
+            buildingSpawner?.ClearAll();
+            simulationEngine?.ClearAllTiles();
+            placementOverlapValidator?.ClearAllTiles();
+            tileTracking?.ClearSessions();
+            _oscToEngineTileId.Clear();
+
+            if (configLoader?.Config != null)
+                Budget = configLoader.Config.Budget?.startingBudget ?? 1000;
+
+            hubLayoutManager?.PickRandomPreset();
+
+            ApplyRegistryHubsToSimulation();
+            placementOverlapValidator?.RefreshHubFootprints();
+            roadNetworkRenderer?.RenderRoads();
+            simulationEngine?.RecalculateMetrics();
+
+            if (sessionTimer != null)
+            {
+                sessionTimer.Stop();
+                sessionTimer.StartSession();
+            }
+
+            Debug.Log($"[Coordinator] Restart complete — budget={Budget}, preset={hubLayoutManager?.ActivePreset?.name}");
+        }
+
         private void ApplyRegistryHubsToSimulation()
         {
             if (simulationEngine == null) return;
@@ -242,9 +279,8 @@ namespace CityTwin.Core
 
         /// <summary>
         /// Build a transit graph using the actual hub positions in content-local space.
-        /// Connects each hub to every other hub so buildings anywhere on the map can
-        /// snap to a nearby road segment. This replaces the config-based graph whose
-        /// small (-90..90) coordinates don't match the real scene layout.
+        /// Only creates edges for hub pairs listed in the active HubLayoutPreset's Connections,
+        /// so the graph (and the road lines rendered from it) matches the manually authored layout.
         /// </summary>
         private void RebuildTransitGraphFromHubs(List<(Vector2 position, float population)> hubs)
         {
@@ -254,18 +290,37 @@ namespace CityTwin.Core
             for (int i = 0; i < hubs.Count; i++)
                 graph.AddNode(hubs[i].position, hubs[i].population);
 
-            for (int i = 0; i < hubs.Count; i++)
+            var preset = hubLayoutManager != null ? hubLayoutManager.ActivePreset : null;
+            if (preset == null || hubRegistry == null)
             {
-                for (int j = i + 1; j < hubs.Count; j++)
-                {
-                    float dist = Vector2.Distance(hubs[i].position, hubs[j].position);
-                    graph.AddEdge(i, j, dist);
-                    graph.AddEdge(j, i, dist);
-                }
+                simulationEngine.SetTransitGraph(graph);
+                Debug.LogWarning("[Coordinator] No active hub layout preset — transit graph built with nodes only, no edges.");
+                return;
+            }
+
+            var registryHubs = hubRegistry.Hubs;
+            int edgeCount = 0;
+            foreach (var pair in preset.Connections)
+            {
+                if (pair.hubA == null || pair.hubB == null || pair.hubA == pair.hubB) continue;
+                int a = IndexOfHub(registryHubs, pair.hubA);
+                int b = IndexOfHub(registryHubs, pair.hubB);
+                if (a < 0 || b < 0) continue;
+                float dist = Vector2.Distance(hubs[a].position, hubs[b].position);
+                graph.AddEdge(a, b, dist);
+                graph.AddEdge(b, a, dist);
+                edgeCount += 2;
             }
 
             simulationEngine.SetTransitGraph(graph);
-            Debug.Log($"[Coordinator] Rebuilt transit graph from {hubs.Count} hub positions ({graph.Edges.Count} edges)");
+            Debug.Log($"[Coordinator] Rebuilt transit graph from preset '{preset.name}': {hubs.Count} nodes, {edgeCount} directed edges");
+        }
+
+        private static int IndexOfHub(IReadOnlyList<ResidentialHubMono> list, ResidentialHubMono hub)
+        {
+            for (int i = 0; i < list.Count; i++)
+                if (list[i] == hub) return i;
+            return -1;
         }
 
         /// <summary>Build transit graph from config map (nodes + edges). Node positions are treated as content root local space.</summary>
@@ -334,8 +389,6 @@ namespace CityTwin.Core
                 : pose.Position * tableScale;
             var simPose = new TilePose(simPos, pose.Rotation, pose.BuildingId, pose.SourceId, pose.TileId);
 
-            Debug.Log($"[Coordinator:TileUpdate] tileId={pose.TileId} building={pose.BuildingId} tuioPos=({pose.Position.x:F3},{pose.Position.y:F3}) → simPos=({simPos.x:F1},{simPos.y:F1})");
-
             if (_oscToEngineTileId.TryGetValue(pose.TileId, out string engineId))
             {
                 buildingSpawner?.MoveBuilding(pose, engineId);
@@ -347,7 +400,6 @@ namespace CityTwin.Core
 
                 simulationEngine.UpdateTilePosition(engineId, simPose.Position, simPose.Rotation, overlaps);
                 bool connected = simulationEngine.IsTileConnected(engineId);
-                Debug.Log($"[Coordinator:MoveExisting] engineId={engineId} overlap={overlaps} connected={connected} simPos=({simPos.x:F1},{simPos.y:F1})");
 
                 placementOverlapValidator?.UpsertTile(engineId, simPose.Position, radius, overlaps);
                 placementOverlapValidator?.SetTileVisualInvalid(engineId, overlaps);
@@ -420,7 +472,7 @@ namespace CityTwin.Core
             else
                 state = MarkerConnectionState.Connected;
 
-            Debug.Log($"[Coordinator:MarkerState] engineId={engineId} inactive={inactive} connected={connected} overlap={overlapInvalid} → {state}");
+            //Debug.Log($"[Coordinator:MarkerState] engineId={engineId} inactive={inactive} connected={connected} overlap={overlapInvalid} → {state}");
             buildingSpawner.SetMarkerConnectionState(engineId, state);
         }
 

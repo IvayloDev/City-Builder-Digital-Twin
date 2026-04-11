@@ -38,6 +38,8 @@ public class DashboardController : MonoBehaviour
     [SerializeField] private float metricSmoothTime = 0.3f;
 
     private float _displayQol;
+    public float DisplayQol => _displayQol;
+
     private float _displayEnv, _displayEco, _displaySaf, _displayCul, _displayAcc;
 
     private void ResetMetricUI()

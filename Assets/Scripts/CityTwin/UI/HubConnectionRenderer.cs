@@ -33,6 +33,7 @@ namespace CityTwin.UI
         [SerializeField] private HubRegistry hubRegistry;
         [SerializeField] private BuildingSpawner buildingSpawner;
         [SerializeField] private SimulationEngine simulationEngine;
+        [SerializeField] private HubLayoutManager hubLayoutManager;
 
         [Header("Building -> Road (two-layer)")]
         [SerializeField] private Color buildingRoadBgColor = new Color(0.486f, 0.549f, 0.627f, 0.25f); // #7c8ca0 at 25%
@@ -60,6 +61,7 @@ namespace CityTwin.UI
             if (hubRegistry == null) hubRegistry = GetComponentInChildren<HubRegistry>(true);
             if (buildingSpawner == null) buildingSpawner = GetComponentInChildren<BuildingSpawner>(true);
             if (simulationEngine == null) simulationEngine = GetComponentInChildren<SimulationEngine>(true);
+            if (hubLayoutManager == null) hubLayoutManager = transform.root.GetComponentInChildren<HubLayoutManager>(true);
         }
 
         private void OnEnable()
@@ -155,35 +157,39 @@ namespace CityTwin.UI
                 }
             }
 
-            // --- Hub -> Hub lines (optional, kept for backward compat) ---
-            if (drawHubToHubConnections && hubRegistry != null)
+            // --- Hub -> Hub lines ---
+            if (drawHubToHubConnections && hubRegistry != null && hubLayoutManager?.ActivePreset != null)
             {
                 hubRegistry.FetchHubs();
                 var hubs = hubRegistry.Hubs;
-                if (hubs.Count >= 2)
+                var connections = hubLayoutManager.ActivePreset.Connections;
+
+                for (int p = 0; p < connections.Count; p++)
                 {
-                    for (int i = 0; i < hubs.Count - 1; i++)
+                    var pair = connections[p];
+                    if (pair.hubA == null || pair.hubB == null) continue;
+
+                    int idxA = IndexOfHub(hubs, pair.hubA);
+                    int idxB = IndexOfHub(hubs, pair.hubB);
+                    if (idxA < 0 || idxB < 0) continue;
+
+                    var key = idxA < idxB ? (idxA, idxB) : (idxB, idxA);
+                    _currentHubHubKeys.Add(key);
+
+                    Vector2 a = RootToHolderSpace(GetHubLocalPosition(pair.hubA, root), root, hhParent);
+                    Vector2 b = RootToHolderSpace(GetHubLocalPosition(pair.hubB, root), root, hhParent);
+
+                    if (!_activeHubHub.TryGetValue(key, out IConnectionVisual visual))
                     {
-                        Vector2 a = RootToHolderSpace(GetHubLocalPosition(hubs[i], root), root, hhParent);
-                        for (int j = i + 1; j < hubs.Count; j++)
-                        {
-                            Vector2 b = RootToHolderSpace(GetHubLocalPosition(hubs[j], root), root, hhParent);
-                            var key = (i, j);
-                            _currentHubHubKeys.Add(key);
-
-                            if (!_activeHubHub.TryGetValue(key, out IConnectionVisual visual))
-                            {
-                                visual = Acquire(hhParent);
-                                if (visual == null) continue;
-                                _activeHubHub[key] = visual;
-                            }
-
-                            visual.UpdateEndpoints(a, b);
-                            if (useHubToHubColorOverride)
-                                ApplyColor(visual, hubToHubColor);
-                            visual.SetActive(true);
-                        }
+                        visual = Acquire(hhParent);
+                        if (visual == null) continue;
+                        _activeHubHub[key] = visual;
                     }
+
+                    visual.UpdateEndpoints(a, b);
+                    if (useHubToHubColorOverride)
+                        ApplyColor(visual, hubToHubColor);
+                    visual.SetActive(true);
                 }
             }
 
@@ -356,5 +362,13 @@ namespace CityTwin.UI
             }
             dict.Clear();
         }
+
+        private static int IndexOfHub(IReadOnlyList<ResidentialHubMono> hubs, ResidentialHubMono hub)
+        {
+            for (int i = 0; i < hubs.Count; i++)
+                if (hubs[i] == hub) return i;
+            return -1;
+        }
+
     }
 }

@@ -120,6 +120,12 @@ namespace CityTwin.Core
             _tileFootprints.Remove(tileId);
         }
 
+        /// <summary>Drop every tile footprint. Used by per-instance restart flows.</summary>
+        public void ClearAllTiles()
+        {
+            _tileFootprints.Clear();
+        }
+
         public void SetTileVisualInvalid(string tileId, bool isInvalid)
         {
             if (string.IsNullOrEmpty(tileId)) return;

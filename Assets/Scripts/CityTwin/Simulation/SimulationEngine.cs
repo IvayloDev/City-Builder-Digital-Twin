@@ -192,6 +192,17 @@ namespace CityTwin.Simulation
             return true;
         }
 
+        /// <summary>Remove every placed tile. Used by per-instance restart flows.</summary>
+        public void ClearAllTiles()
+        {
+            _placedTiles.Clear();
+            _nextTileId = 0;
+            RecalculateMetrics();
+        }
+
+        /// <summary>Number of currently placed tiles on this instance's play field.</summary>
+        public int PlacedTileCount => _placedTiles.Count;
+
         /// <summary>True if the tile is placed on an obstacle (e.g. water) and does not affect QOL. Use for UI feedback.</summary>
         public bool IsTileInactive(string tileId)
         {

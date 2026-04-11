@@ -118,6 +118,14 @@ namespace CityTwin.Input
             _lastAlive = alive;
         }
 
+        /// <summary>Forget all tracked TUIO sessions. Used by per-instance restart flows so
+        /// physical tiles still on the table are treated as new placements after restart.</summary>
+        public void ClearSessions()
+        {
+            _sessionToTileId.Clear();
+            _lastAlive.Clear();
+        }
+
         private string ResolveBuildingId(int classId)
         {
             foreach (var m in classIdToBuilding)

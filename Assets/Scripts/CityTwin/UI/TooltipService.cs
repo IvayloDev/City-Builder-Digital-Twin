@@ -18,9 +18,7 @@ namespace CityTwin.UI
         [SerializeField] private SimulationEngine simulationEngine;
         [Header("UI")]
         [SerializeField] private TextMeshProUGUI statusBarText;
-        [SerializeField] private TextMeshProUGUI endTitleText;
-        [SerializeField] private TextMeshProUGUI endBodyText;
-        [SerializeField] private GameObject endPanel;
+        [SerializeField] private EndScreenController endScreen;
 
         private int _introKeyIndex;
         private float _nextIntroTime;
@@ -31,6 +29,7 @@ namespace CityTwin.UI
             if (localization == null) localization = GetComponentInChildren<LocalizationService>(true);
             if (sessionTimer == null) sessionTimer = GetComponentInChildren<SessionTimer>(true);
             if (simulationEngine == null) simulationEngine = GetComponentInChildren<SimulationEngine>(true);
+            if (endScreen == null) endScreen = GetComponentInChildren<EndScreenController>(true);
         }
 
         private void OnEnable()
@@ -67,27 +66,36 @@ namespace CityTwin.UI
 
         private void OnPhaseChanged(SessionTimer.Phase phase)
         {
+            if (phase == SessionTimer.Phase.Intro)
+            {
+                // A new session just started (fresh game or restart) — hide the end screen and reset intro sequence.
+                endScreen?.Hide();
+                _introKeyIndex = 0;
+                _nextIntroTime = 0f;
+            }
             if (phase == SessionTimer.Phase.Gameplay && statusBarText != null && localization != null)
                 statusBarText.text = localization.GetString("ui.timer");
         }
 
         private void OnTimerEnded()
         {
-            if (endPanel != null) endPanel.SetActive(true);
             int qol = simulationEngine != null ? Mathf.RoundToInt(simulationEngine.Qol) : 0;
             var cfg = configLoader?.Config?.EndMessages;
-            if (cfg != null && endTitleText != null && endBodyText != null && localization != null)
+            string title = string.Empty;
+            string body = string.Empty;
+            if (cfg != null && localization != null)
             {
                 foreach (var msg in cfg)
                 {
                     if (qol >= msg.min && qol <= msg.max)
                     {
-                        endTitleText.text = localization.GetString(msg.titleKey);
-                        endBodyText.text = localization.GetString(msg.bodyKey);
+                        title = localization.GetString(msg.titleKey);
+                        body = localization.GetString(msg.bodyKey);
                         break;
                     }
                 }
             }
+            endScreen?.Show(title, body);
         }
     }
 }
