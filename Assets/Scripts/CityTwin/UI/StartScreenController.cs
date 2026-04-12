@@ -132,6 +132,13 @@ namespace CityTwin.UI
             if (sessionTimer != null)
                 sessionTimer.StartSession();
         }
+
+        /// <summary>Re-show the start overlay and reset the started flag so the next language pick begins a fresh session. Call from restart flows.</summary>
+        public void ShowStartScreen()
+        {
+            _started = false;
+            if (overlayRoot != null) overlayRoot.SetActive(true);
+        }
     }
 }
 

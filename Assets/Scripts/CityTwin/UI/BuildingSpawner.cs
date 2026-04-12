@@ -225,6 +225,12 @@ namespace CityTwin.UI
             display.SetConnectionState(state);
         }
 
+        public void SetMarkerOverBudget(string engineTileId, bool isOverBudget)
+        {
+            if (!TryGetMarkerDisplay(engineTileId, out var display)) return;
+            display.SetOverBudget(isOverBudget);
+        }
+
         /// <summary>Remove all spawned markers (e.g. on reset).</summary>
         public void ClearAll()
         {

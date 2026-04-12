@@ -23,12 +23,16 @@ namespace CityTwin.Core
         [SerializeField] private HubConnectionRenderer hubConnectionRenderer;
         [Tooltip("Optional. Validates building overlap against buildings and hubs using visual radii.")]
         [SerializeField] private PlacementOverlapValidator placementOverlapValidator;
-        [Tooltip("Optional. Renders transit graph edges as road lines on the map.")]
-        [SerializeField] private RoadNetworkRenderer roadNetworkRenderer;
         [Tooltip("Optional. Manages randomized hub layout presets. Restart will pick a new random preset.")]
         [SerializeField] private HubLayoutManager hubLayoutManager;
+        [Tooltip("Optional. Start/language overlay. Restart will re-show it so the next session is a fresh start.")]
+        [SerializeField] private StartScreenController startScreen;
+        [Tooltip("Optional. End-of-session overlay. Restart will hide it.")]
+        [SerializeField] private EndScreenController endScreen;
 
         private readonly Dictionary<string, string> _oscToEngineTileId = new Dictionary<string, string>();
+        private readonly HashSet<string> _overBudgetTiles = new HashSet<string>();
+        private int _overBudgetCounter;
 
         /// <summary>Current budget for this instance. Decremented when placing tiles.</summary>
         public int Budget { get; private set; }
@@ -51,7 +55,8 @@ namespace CityTwin.Core
         {
             if (buildingSpawner == null) buildingSpawner = GetComponentInChildren<BuildingSpawner>(true);
             if (placementOverlapValidator == null) placementOverlapValidator = GetComponentInChildren<PlacementOverlapValidator>(true);
-            if (roadNetworkRenderer == null) roadNetworkRenderer = GetComponentInChildren<RoadNetworkRenderer>(true);
+            if (startScreen == null) startScreen = GetComponentInChildren<CityTwin.UI.StartScreenController>(true);
+            if (endScreen == null) endScreen = GetComponentInChildren<CityTwin.UI.EndScreenController>(true);
             if (configLoader != null)
             {
                 configLoader.OnConfigLoaded += HandleConfigLoaded;
@@ -72,7 +77,6 @@ namespace CityTwin.Core
         {
             ApplyRegistryHubsToSimulation();
             placementOverlapValidator?.RefreshHubFootprints();
-            roadNetworkRenderer?.RenderRoads();
             simulationEngine?.RecalculateMetrics();
 
             LogStartupDiagnostics();
@@ -231,6 +235,7 @@ namespace CityTwin.Core
             placementOverlapValidator?.ClearAllTiles();
             tileTracking?.ClearSessions();
             _oscToEngineTileId.Clear();
+            _overBudgetTiles.Clear();
 
             if (configLoader?.Config != null)
                 Budget = configLoader.Config.Budget?.startingBudget ?? 1000;
@@ -239,14 +244,11 @@ namespace CityTwin.Core
 
             ApplyRegistryHubsToSimulation();
             placementOverlapValidator?.RefreshHubFootprints();
-            roadNetworkRenderer?.RenderRoads();
             simulationEngine?.RecalculateMetrics();
 
-            if (sessionTimer != null)
-            {
-                sessionTimer.Stop();
-                sessionTimer.StartSession();
-            }
+            sessionTimer?.Stop();
+            endScreen?.Hide();
+            startScreen?.ShowStartScreen();
 
             Debug.Log($"[Coordinator] Restart complete — budget={Budget}, preset={hubLayoutManager?.ActivePreset?.name}");
         }
@@ -391,6 +393,12 @@ namespace CityTwin.Core
 
             if (_oscToEngineTileId.TryGetValue(pose.TileId, out string engineId))
             {
+                if (_overBudgetTiles.Contains(engineId))
+                {
+                    buildingSpawner?.MoveBuilding(pose, engineId);
+                    return;
+                }
+
                 buildingSpawner?.MoveBuilding(pose, engineId);
                 float radius = placementOverlapValidator != null
                     ? placementOverlapValidator.ResolveRadiusForTile(engineId, simPose.BuildingId)
@@ -428,7 +436,17 @@ namespace CityTwin.Core
                 Debug.Log($"[Coordinator:NewTile] BLOCKED — overlapping another building or hub at ({simPos.x:F1},{simPos.y:F1}).");
                 return;
             }
-            if (price > 0 && Budget < price) { Debug.LogWarning($"[Coordinator:NewTile] BLOCKED — not enough budget: need {price}, have {Budget}."); return; }
+            if (price > 0 && Budget < price)
+            {
+                Debug.LogWarning($"[Coordinator:NewTile] OVER BUDGET — need {price}, have {Budget}. Spawning visual-only marker.");
+                string overBudgetId = $"ob:{pose.TileId}:{++_overBudgetCounter}";
+                _oscToEngineTileId[pose.TileId] = overBudgetId;
+                _overBudgetTiles.Add(overBudgetId);
+                buildingSpawner?.SpawnBuilding(pose, overBudgetId);
+                buildingSpawner?.SetMarkerOverBudget(overBudgetId, true);
+                buildingSpawner?.SetMarkerConnectionState(overBudgetId, MarkerConnectionState.Inactive);
+                return;
+            }
             if (price > 0) Budget -= price;
             engineId = simulationEngine.AddTile(simPose);
 
@@ -481,6 +499,13 @@ namespace CityTwin.Core
             if (simulationEngine == null) return;
             if (_oscToEngineTileId.TryGetValue(oscTileId, out string engineId))
             {
+                if (_overBudgetTiles.Remove(engineId))
+                {
+                    _oscToEngineTileId.Remove(oscTileId);
+                    buildingSpawner?.RemoveBuilding(engineId);
+                    return;
+                }
+
                 string buildingId = simulationEngine.GetBuildingIdForTile(engineId);
                 _oscToEngineTileId.Remove(oscTileId);
                 buildingSpawner?.RemoveBuilding(engineId);

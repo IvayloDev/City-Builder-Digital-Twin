@@ -27,6 +27,8 @@ namespace CityTwin.UI
         [SerializeField] private float baseHaloScale = 1f;
         [Tooltip("Fallback halo radius used when no halo image/rect is available.")]
         [SerializeField] private float fallbackHaloRadius = 24f;
+        [Tooltip("Optional: GameObject (e.g. a speech bubble) shown only when this building was placed but exceeds the available budget.")]
+        [SerializeField] private GameObject overBudgetIndicator;
 
         private static readonly Color DisconnectedColor = new Color(1f, 0f, 0.4f, 0.95f); // #ff0066
         private static readonly Color InactiveColor = new Color(0.4f, 0.4f, 0.4f, 0.95f);  // #666
@@ -41,6 +43,12 @@ namespace CityTwin.UI
         private void Awake()
         {
             EnsureReferences();
+            if (overBudgetIndicator != null) overBudgetIndicator.SetActive(false);
+        }
+
+        public void SetOverBudget(bool isOverBudget)
+        {
+            if (overBudgetIndicator != null) overBudgetIndicator.SetActive(isOverBudget);
         }
 
         public void SetBuilding(string buildingId)
