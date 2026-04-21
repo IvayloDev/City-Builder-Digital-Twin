@@ -4,7 +4,6 @@
     "defaultLanguage": "EN"
   },
   "session": {
-    "introSeconds": 10,
     "gameplaySeconds": 270,
     "maxPlayers": 4
   },
@@ -63,6 +62,17 @@
     ],
     "obstacles": []
   },
+  "tutorial": {
+    "steps": [
+      { "textKey": "tutorial.step1", "durationSeconds": 5 },
+      { "textKey": "tutorial.step2", "durationSeconds": 6 },
+      { "textKey": "tutorial.step3", "durationSeconds": 5 }
+    ]
+  },
+  "inactivity": {
+    "timeoutSeconds": 30,
+    "textKey": "ui.inactivity"
+  },
   "tooltips": {
     "introKeys": []
   },
@@ -98,6 +108,10 @@
       "start.english": "ENGLISH",
       "start.russian": "НАЧАТЬ",
       "start.kazakh": "БАСТАУ",
+      "tutorial.step1": "Welcome! Place buildings on the map to improve your city.",
+      "tutorial.step2": "Each building costs budget and affects quality of life metrics.",
+      "tutorial.step3": "Connect buildings to residential hubs for maximum impact. Good luck!",
+      "ui.inactivity": "Place a tile on the table to continue playing!",
       "start.placeTile": "Place a tile to select language",
       "end.0_20.title": "Critical",
       "end.0_20.body": "Re-balancing required.",
@@ -134,6 +148,10 @@
       "start.english": "АНГЛИЙСКИЙ",
       "start.russian": "НАЧАТЬ",
       "start.kazakh": "БАСТАУ",
+      "tutorial.step1": "Добро пожаловать! Размещайте здания на карте, чтобы улучшить город.",
+      "tutorial.step2": "Каждое здание стоит бюджет и влияет на показатели качества жизни.",
+      "tutorial.step3": "Соединяйте здания с жилыми районами для максимального эффекта. Удачи!",
+      "ui.inactivity": "Положите плитку на стол, чтобы продолжить игру!",
       "start.placeTile": "Положите плитку, чтобы выбрать язык",
       "end.0_20.title": "Критично",
       "end.0_20.body": "Требуется пересбалансировка.",
@@ -170,6 +188,10 @@
       "start.english": "ENGLISH",
       "start.russian": "НАЧАТЬ",
       "start.kazakh": "БАСТАУ",
+      "tutorial.step1": "Қош келдіңіз! Қаланы жақсарту үшін ғимараттарды картаға орналастырыңыз.",
+      "tutorial.step2": "Әр ғимарат бюджет тұрады және өмір сапасы көрсеткіштеріне әсер етеді.",
+      "tutorial.step3": "Максималды әсер үшін ғимараттарды тұрғын аудандарға қосыңыз. Сәттілік!",
+      "ui.inactivity": "Ойынды жалғастыру үшін плитканы үстелге қойыңыз!",
       "start.placeTile": "Тілді таңдау үшін плитканы қойыңыз",
       "end.0_20.title": "Сыни",
       "end.0_20.body": "Қайта теңгеру қажет.",

@@ -7,14 +7,13 @@ namespace CityTwin.Core
     /// <summary>Per-instance session timer: intro then gameplay then end. No statics.</summary>
     public class SessionTimer : MonoBehaviour
     {
-        [SerializeField] private int introSeconds = 90;
         [SerializeField] private int gameplaySeconds = 270;
 
         private float _remainingSeconds;
-        private Phase _phase = Phase.Intro;
+        private Phase _phase = Phase.Gameplay;
         private bool _running;
 
-        public enum Phase { Intro, Gameplay, End }
+        public enum Phase { Gameplay, End }
         public Phase CurrentPhase => _phase;
         public float RemainingSeconds => _remainingSeconds;
         public bool IsRunning => _running;
@@ -25,14 +24,13 @@ namespace CityTwin.Core
         public void SetFromConfig(GameConfig config)
         {
             if (config?.Session == null) return;
-            introSeconds = config.Session.introSeconds;
             gameplaySeconds = config.Session.gameplaySeconds;
         }
 
         public void StartSession()
         {
-            _phase = Phase.Intro;
-            _remainingSeconds = introSeconds;
+            _phase = Phase.Gameplay;
+            _remainingSeconds = gameplaySeconds;
             _running = true;
             OnPhaseChanged?.Invoke(_phase);
         }
@@ -48,19 +46,10 @@ namespace CityTwin.Core
             _remainingSeconds -= Time.deltaTime;
             if (_remainingSeconds <= 0)
             {
-                if (_phase == Phase.Intro)
-                {
-                    _phase = Phase.Gameplay;
-                    _remainingSeconds = gameplaySeconds;
-                    OnPhaseChanged?.Invoke(_phase);
-                }
-                else
-                {
-                    _phase = Phase.End;
-                    _running = false;
-                    OnPhaseChanged?.Invoke(_phase);
-                    OnTimerEnded?.Invoke();
-                }
+                _phase = Phase.End;
+                _running = false;
+                OnPhaseChanged?.Invoke(_phase);
+                OnTimerEnded?.Invoke();
             }
         }
 

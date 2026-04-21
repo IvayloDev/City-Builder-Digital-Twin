@@ -18,6 +18,8 @@ namespace CityTwin.Config
         public BuildingDefinition[] Buildings;
         public MapData Map;
         public TooltipsData Tooltips;
+        public TutorialData Tutorial;
+        public InactivityData Inactivity;
         public EndMessageData[] EndMessages;
         public Dictionary<string, Dictionary<string, string>> Localization;
 
@@ -65,7 +67,6 @@ namespace CityTwin.Config
         [Serializable]
         public class SessionData
         {
-            public int introSeconds = 90;
             public int gameplaySeconds = 270;
             public int maxPlayers = 4;
         }
@@ -126,6 +127,26 @@ namespace CityTwin.Config
             public int max;
             public string titleKey;
             public string bodyKey;
+        }
+
+        [Serializable]
+        public class TutorialData
+        {
+            public TutorialStepData[] steps;
+        }
+
+        [Serializable]
+        public class TutorialStepData
+        {
+            public string textKey;
+            public float durationSeconds = 5f;
+        }
+
+        [Serializable]
+        public class InactivityData
+        {
+            public float timeoutSeconds = 30f;
+            public string textKey = "ui.inactivity";
         }
     }
 }

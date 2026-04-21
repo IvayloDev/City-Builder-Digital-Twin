@@ -1,3 +1,4 @@
+using System;
 using UnityEngine;
 using UnityEngine.UI;
 using CityTwin.Core;
@@ -9,6 +10,7 @@ namespace CityTwin.UI
     /// <summary>
     /// Splash/start overlay that lets the player pick a language and begin the session.
     /// Supports both UI button clicks and "place any tile on a language button" (TUIO).
+    /// After language selection, starts the tutorial. Session timer begins after tutorial completes.
     /// </summary>
     public class StartScreenController : MonoBehaviour
     {
@@ -16,6 +18,8 @@ namespace CityTwin.UI
         [SerializeField] private TileTrackingManager tileTracking;
         [SerializeField] private LocalizationService localization;
         [SerializeField] private SessionTimer sessionTimer;
+        [SerializeField] private TutorialSequenceController tutorialSequence;
+        [SerializeField] private InactivityPopupController inactivityPopup;
 
         [Header("UI")]
         [Tooltip("Root RectTransform for hit testing (should match BuildingSpawner.ContentRoot / table area).")]
@@ -49,6 +53,8 @@ namespace CityTwin.UI
             if (tileTracking == null) tileTracking = GetComponentInChildren<TileTrackingManager>(true) ?? GetComponentInParent<TileTrackingManager>();
             if (localization == null) localization = GetComponentInChildren<LocalizationService>(true) ?? GetComponentInParent<LocalizationService>();
             if (sessionTimer == null) sessionTimer = GetComponentInChildren<SessionTimer>(true) ?? GetComponentInParent<SessionTimer>();
+            if (tutorialSequence == null) tutorialSequence = GetComponentInChildren<TutorialSequenceController>(true) ?? GetComponentInParent<TutorialSequenceController>();
+            if (inactivityPopup == null) inactivityPopup = GetComponentInChildren<InactivityPopupController>(true) ?? GetComponentInParent<InactivityPopupController>();
         }
 
         private void OnEnable()
@@ -129,14 +135,27 @@ namespace CityTwin.UI
             if (overlayRoot != null)
                 overlayRoot.SetActive(false);
 
+            BeginSession();
+
+            if (tutorialSequence != null)
+                tutorialSequence.StartTutorial();
+        }
+
+        private void BeginSession()
+        {
             if (sessionTimer != null)
                 sessionTimer.StartSession();
+
+            if (inactivityPopup != null)
+                inactivityPopup.Activate();
         }
 
         /// <summary>Re-show the start overlay and reset the started flag so the next language pick begins a fresh session. Call from restart flows.</summary>
         public void ShowStartScreen()
         {
             _started = false;
+            tutorialSequence?.StopTutorial();
+            inactivityPopup?.Deactivate();
             if (overlayRoot != null) overlayRoot.SetActive(true);
         }
     }

@@ -138,6 +138,8 @@ namespace CityTwin.Config
                 }
                 config.Osc = root.osc ?? new GameConfig.OscData();
                 config.Tooltips = root.tooltips ?? new GameConfig.TooltipsData();
+                config.Tutorial = root.tutorial ?? new GameConfig.TutorialData();
+                config.Inactivity = root.inactivity ?? new GameConfig.InactivityData();
                 config.EndMessages = root.endMessages ?? Array.Empty<GameConfig.EndMessageData>();
 
                 config.Buildings = MapBuildings(root.buildings);
@@ -298,6 +300,8 @@ namespace CityTwin.Config
                 Osc = new GameConfig.OscData { sources = Array.Empty<GameConfig.OscSourceData>() },
                 Buildings = Array.Empty<BuildingDefinition>(),
                 Tooltips = new GameConfig.TooltipsData { introKeys = Array.Empty<string>() },
+                Tutorial = new GameConfig.TutorialData(),
+                Inactivity = new GameConfig.InactivityData(),
                 EndMessages = Array.Empty<GameConfig.EndMessageData>(),
                 Localization = new Dictionary<string, Dictionary<string, string>>(StringComparer.OrdinalIgnoreCase)
             };

@@ -37,6 +37,9 @@ namespace CityTwin.Core
         /// <summary>Current budget for this instance. Decremented when placing tiles.</summary>
         public int Budget { get; private set; }
 
+        /// <summary>Fires whenever a tile is placed, moved, or removed (from any input source).</summary>
+        public event System.Action OnTileActivity;
+
         private void Awake()
         {
             if (gameInstanceRoot == null) gameInstanceRoot = GetComponentInParent<GameInstanceRoot>(true) ?? GetComponent<GameInstanceRoot>();
@@ -383,6 +386,7 @@ namespace CityTwin.Core
 
         private void OnTileUpdated(TilePose pose)
         {
+            OnTileActivity?.Invoke();
             if (simulationEngine == null) { Debug.LogWarning("[Coordinator] simulationEngine is null, skipping."); return; }
             placementOverlapValidator?.RefreshHubFootprints();
 
@@ -496,6 +500,7 @@ namespace CityTwin.Core
 
         private void OnTileRemoved(string oscTileId)
         {
+            OnTileActivity?.Invoke();
             if (simulationEngine == null) return;
             if (_oscToEngineTileId.TryGetValue(oscTileId, out string engineId))
             {

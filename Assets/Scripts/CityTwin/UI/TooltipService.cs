@@ -52,7 +52,7 @@ namespace CityTwin.UI
 
         private void Update()
         {
-            if (sessionTimer != null && sessionTimer.CurrentPhase == SessionTimer.Phase.Intro && sessionTimer.IsRunning)
+            if (sessionTimer != null && sessionTimer.CurrentPhase == SessionTimer.Phase.Gameplay && sessionTimer.IsRunning)
             {
                 if (Time.time >= _nextIntroTime && configLoader?.Config?.Tooltips?.introKeys != null && _introKeyIndex < configLoader.Config.Tooltips.introKeys.Length)
                 {
@@ -66,7 +66,7 @@ namespace CityTwin.UI
 
         private void OnPhaseChanged(SessionTimer.Phase phase)
         {
-            if (phase == SessionTimer.Phase.Intro)
+            if (phase == SessionTimer.Phase.Gameplay)
             {
                 // A new session just started (fresh game or restart) — hide the end screen and reset intro sequence.
                 endScreen?.Hide();
