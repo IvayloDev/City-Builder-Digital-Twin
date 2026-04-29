@@ -12,8 +12,30 @@
     "startingBudget": 1000
   },
   "scoring": {
-    "qolCapPerMetric": 20,
-    "epsilonDistance": 1.0
+    "epsilonDistance": 1.0,
+    "norm": 150,
+    "equalDistrictWeight": 100000,
+    "influenceRefBase": 20,
+    "influenceReferenceMeters": 15,
+    "distanceExponent": 1,
+    "distanceFloor": 50,
+    "distanceScale": 100,
+    "maxRoadDistance": 150,
+    "qolBalancePenalty": 0.5,
+    "qolCap": 80,
+    "sizeBoostSmall": 1.2,
+    "sizeBoostMedium": 1.1,
+    "sizeBoostLarge": 1.0,
+    "nearCapSmall": 0.5,
+    "nearCapMedium": 0.75,
+    "nearCapLarge": 1.0,
+    "impactRadiusSmall": 75,
+    "impactRadiusMedium": 112,
+    "impactRadiusLarge": 150,
+    "qolWeightEnv": 1,
+    "qolWeightEco": 1,
+    "qolWeightSaf": 1,
+    "qolWeightCul": 1
   },
   "accessibility": {
     "walkingDistance": 500,
@@ -21,6 +43,11 @@
     "roadConnectRange": 500,
     "zoneRadius": 400,
     "defaultConnectionRadius": 600
+  },
+  "stops": {
+    "spacing": 180,
+    "minDistanceFromNode": 30,
+    "minDistanceBetweenStops": 30
   },
   "osc": {
     
@@ -32,18 +59,18 @@
     ]
   },
   "buildings": [
-    { "id": "garden", "category": "Environment", "impactSize": "Small", "importance": 0.6, "price": 180, "connectionRadius": 600, "baseValues": { "environment": 5, "economy": 2, "healthSafety": -2, "cultureEdu": 2 }, "localizationKey": "building.garden.name" },
-    { "id": "park", "category": "Environment", "impactSize": "Medium", "importance": 0.7, "price": 350, "connectionRadius": 800, "baseValues": { "environment": 7, "economy": 3, "healthSafety": -3, "cultureEdu": 5 }, "localizationKey": "building.park.name" },
-    { "id": "recycling_plant", "category": "Environment", "impactSize": "Large", "importance": 0.8, "price": 550, "connectionRadius": 1000, "baseValues": { "environment": 10, "economy": 4, "healthSafety": -4, "cultureEdu": 0 }, "localizationKey": "building.recycling_plant.name" },
-    { "id": "office", "category": "Economy", "impactSize": "Small", "importance": 0.7, "price": 100, "connectionRadius": 600, "baseValues": { "environment": -3, "economy": 5, "healthSafety": -2, "cultureEdu": 0 }, "localizationKey": "building.office.name" },
-    { "id": "mall", "category": "Economy", "impactSize": "Medium", "importance": 0.6, "price": 200, "connectionRadius": 800, "baseValues": { "environment": -4, "economy": 7, "healthSafety": -3, "cultureEdu": 0 }, "localizationKey": "building.mall.name" },
-    { "id": "factory", "category": "Economy", "impactSize": "Large", "importance": 0.5, "price": 500, "connectionRadius": 1000, "baseValues": { "environment": -6, "economy": 10, "healthSafety": -4, "cultureEdu": 0 }, "localizationKey": "building.factory.name" },
-    { "id": "police_station", "category": "HealthSafety", "impactSize": "Small", "importance": 0.9, "price": 150, "connectionRadius": 600, "baseValues": { "environment": 0, "economy": 2, "healthSafety": 5, "cultureEdu": 0 }, "localizationKey": "building.police_station.name" },
-    { "id": "fire_station", "category": "HealthSafety", "impactSize": "Medium", "importance": 0.9, "price": 300, "connectionRadius": 800, "baseValues": { "environment": 0, "economy": 3, "healthSafety": 7, "cultureEdu": 0 }, "localizationKey": "building.fire_station.name" },
-    { "id": "hospital", "category": "HealthSafety", "impactSize": "Large", "importance": 1.0, "price": 600, "connectionRadius": 1000, "baseValues": { "environment": 0, "economy": 4, "healthSafety": 10, "cultureEdu": 0 }, "localizationKey": "building.hospital.name" },
-    { "id": "school", "category": "CultureEdu", "impactSize": "Small", "importance": 1.0, "price": 120, "connectionRadius": 600, "baseValues": { "environment": 1, "economy": 1, "healthSafety": -2, "cultureEdu": 5 }, "localizationKey": "building.school.name" },
-    { "id": "museum", "category": "CultureEdu", "impactSize": "Medium", "importance": 0.8, "price": 250, "connectionRadius": 800, "baseValues": { "environment": 0, "economy": 2, "healthSafety": -3, "cultureEdu": 7 }, "localizationKey": "building.museum.name" },
-    { "id": "state_circus", "category": "CultureEdu", "impactSize": "Large", "importance": 0.6, "price": 520, "connectionRadius": 1000, "baseValues": { "environment": -1, "economy": 3, "healthSafety": -4, "cultureEdu": 10 }, "localizationKey": "building.state_circus.name" }
+    { "id": "garden", "category": "Environment", "impactSize": "Small", "importance": 0.6, "price": 180, "connectionRadius": 600, "baseValues": { "environment": 5, "economy": 0, "healthSafety": 0, "cultureEdu": 0 }, "localizationKey": "building.garden.name" },
+    { "id": "park", "category": "Environment", "impactSize": "Medium", "importance": 0.7, "price": 350, "connectionRadius": 800, "baseValues": { "environment": 7, "economy": 0, "healthSafety": 0, "cultureEdu": 0 }, "localizationKey": "building.park.name" },
+    { "id": "recycling_plant", "category": "Environment", "impactSize": "Large", "importance": 0.8, "price": 550, "connectionRadius": 1000, "baseValues": { "environment": 10, "economy": 0, "healthSafety": 0, "cultureEdu": 0 }, "localizationKey": "building.recycling_plant.name" },
+    { "id": "office", "category": "Economy", "impactSize": "Small", "importance": 0.7, "price": 100, "connectionRadius": 600, "baseValues": { "environment": 0, "economy": 5, "healthSafety": 0, "cultureEdu": 0 }, "localizationKey": "building.office.name" },
+    { "id": "mall", "category": "Economy", "impactSize": "Medium", "importance": 0.6, "price": 200, "connectionRadius": 800, "baseValues": { "environment": 0, "economy": 7, "healthSafety": 0, "cultureEdu": 0 }, "localizationKey": "building.mall.name" },
+    { "id": "factory", "category": "Economy", "impactSize": "Large", "importance": 0.5, "price": 500, "connectionRadius": 1000, "baseValues": { "environment": 0, "economy": 10, "healthSafety": 0, "cultureEdu": 0 }, "localizationKey": "building.factory.name" },
+    { "id": "police_station", "category": "HealthSafety", "impactSize": "Small", "importance": 0.9, "price": 150, "connectionRadius": 600, "baseValues": { "environment": 0, "economy": 0, "healthSafety": 5, "cultureEdu": 0 }, "localizationKey": "building.police_station.name" },
+    { "id": "fire_station", "category": "HealthSafety", "impactSize": "Medium", "importance": 0.9, "price": 300, "connectionRadius": 800, "baseValues": { "environment": 0, "economy": 0, "healthSafety": 7, "cultureEdu": 0 }, "localizationKey": "building.fire_station.name" },
+    { "id": "hospital", "category": "HealthSafety", "impactSize": "Large", "importance": 1.0, "price": 600, "connectionRadius": 1000, "baseValues": { "environment": 0, "economy": 0, "healthSafety": 10, "cultureEdu": 0 }, "localizationKey": "building.hospital.name" },
+    { "id": "school", "category": "CultureEdu", "impactSize": "Small", "importance": 1.0, "price": 120, "connectionRadius": 600, "baseValues": { "environment": 0, "economy": 0, "healthSafety": 0, "cultureEdu": 5 }, "localizationKey": "building.school.name" },
+    { "id": "museum", "category": "CultureEdu", "impactSize": "Medium", "importance": 0.8, "price": 250, "connectionRadius": 800, "baseValues": { "environment": 0, "economy": 0, "healthSafety": 0, "cultureEdu": 7 }, "localizationKey": "building.museum.name" },
+    { "id": "state_circus", "category": "CultureEdu", "impactSize": "Large", "importance": 0.6, "price": 520, "connectionRadius": 1000, "baseValues": { "environment": 0, "economy": 0, "healthSafety": 0, "cultureEdu": 10 }, "localizationKey": "building.state_circus.name" }
   ],
   "map": {
     "nodes": [

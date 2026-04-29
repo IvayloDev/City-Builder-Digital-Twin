@@ -79,6 +79,7 @@ namespace CityTwin.Core
         private void Start()
         {
             ApplyRegistryHubsToSimulation();
+            GenerateTransitStops();
             placementOverlapValidator?.RefreshHubFootprints();
             simulationEngine?.RecalculateMetrics();
 
@@ -167,16 +168,7 @@ namespace CityTwin.Core
             Budget = cfg.Budget?.startingBudget ?? 1000;
             simulationEngine?.SetBuildingCatalog(new List<BuildingDefinition>(cfg.Buildings ?? System.Array.Empty<BuildingDefinition>()));
 
-            var acc = cfg.Accessibility;
-            simulationEngine?.SetConfig(
-                cfg.Scoring.epsilonDistance,
-                cfg.Scoring.qolCapPerMetric,
-                acc.walkingDistance,
-                acc.roadConnectRange,
-                acc.zoneRadius,
-                acc.defaultConnectionRadius,
-                cfg.Scoring.populationScale
-            );
+            simulationEngine?.SetConfig(cfg.Scoring, cfg.Accessibility);
 
             if (cfg.Map != null && cfg.Map.nodes != null && cfg.Map.nodes.Length > 0)
                 BuildTransitGraphFromConfig(cfg.Map);
@@ -184,6 +176,7 @@ namespace CityTwin.Core
                 BuildDefaultTransitGraphIfNeeded();
 
             ApplyRegistryHubsToSimulation();
+            GenerateTransitStops();
             placementOverlapValidator?.RefreshHubFootprints();
 
             if (sessionTimer != null)
@@ -246,6 +239,7 @@ namespace CityTwin.Core
             hubLayoutManager?.PickRandomPreset();
 
             ApplyRegistryHubsToSimulation();
+            GenerateTransitStops();
             placementOverlapValidator?.RefreshHubFootprints();
             simulationEngine?.RecalculateMetrics();
 
@@ -319,6 +313,31 @@ namespace CityTwin.Core
 
             simulationEngine.SetTransitGraph(graph);
             Debug.Log($"[Coordinator] Rebuilt transit graph from preset '{preset.name}': {hubs.Count} nodes, {edgeCount} directed edges");
+        }
+
+        /// <summary>Generate transit stops along road edges using config values.</summary>
+        private void GenerateTransitStops()
+        {
+            if (simulationEngine == null)
+            {
+                Debug.LogWarning("[Coordinator:Stops] simulationEngine is NULL — cannot generate stops.");
+                return;
+            }
+            var graph = simulationEngine.TransitGraph;
+            if (graph == null)
+            {
+                Debug.LogWarning("[Coordinator:Stops] TransitGraph is NULL — cannot generate stops.");
+                return;
+            }
+
+            var stopsConfig = configLoader?.Config?.Stops;
+            float spacing = stopsConfig?.spacing ?? 60f;
+            float minNodeDist = stopsConfig?.minDistanceFromNode ?? 30f;
+            float minStopDist = stopsConfig?.minDistanceBetweenStops ?? 30f;
+
+            Debug.Log($"[Coordinator:Stops] Generating stops — graph has {graph.Nodes.Count} nodes, {graph.Edges.Count} edges. Config: spacing={spacing}, minNodeDist={minNodeDist}, minStopDist={minStopDist}");
+            graph.GenerateStops(spacing, minNodeDist, minStopDist);
+            Debug.Log($"[Coordinator:Stops] Result: {graph.Stops.Count} stops generated.");
         }
 
         private static int IndexOfHub(IReadOnlyList<ResidentialHubMono> list, ResidentialHubMono hub)

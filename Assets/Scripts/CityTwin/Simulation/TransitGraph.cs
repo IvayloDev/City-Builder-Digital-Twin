@@ -10,9 +10,11 @@ namespace CityTwin.Simulation
         private readonly List<TransitNode> _nodes = new List<TransitNode>();
         private readonly List<TransitEdge> _edges = new List<TransitEdge>();
         private readonly Dictionary<int, List<TransitEdge>> _outgoing = new Dictionary<int, List<TransitEdge>>();
+        private readonly List<TransitStop> _stops = new List<TransitStop>();
 
         public IReadOnlyList<TransitNode> Nodes => _nodes;
         public IReadOnlyList<TransitEdge> Edges => _edges;
+        public IReadOnlyList<TransitStop> Stops => _stops;
 
         public struct TransitNode
         {
@@ -28,11 +30,19 @@ namespace CityTwin.Simulation
             public float Length;
         }
 
+        public struct TransitStop
+        {
+            public Vector2 Position;
+            public int EdgeFromId;
+            public int EdgeToId;
+        }
+
         public void Clear()
         {
             _nodes.Clear();
             _edges.Clear();
             _outgoing.Clear();
+            _stops.Clear();
         }
 
         public int AddNode(Vector2 position, float population = 0f)
@@ -50,6 +60,71 @@ namespace CityTwin.Simulation
             var edge = new TransitEdge { FromId = fromId, ToId = toId, Length = length };
             _edges.Add(edge);
             _outgoing[fromId].Add(edge);
+        }
+
+        /// <summary>
+        /// Generate transit stops along edges at regular intervals.
+        /// Matches HTML logic: evenly spaced along each edge, rejected if too close to a node or another stop.
+        /// </summary>
+        public void GenerateStops(float spacing = 60f, float minDistFromNode = 30f, float minDistBetweenStops = 30f)
+        {
+            _stops.Clear();
+            if (_edges.Count == 0 || _nodes.Count < 2) return;
+
+            // Deduplicate edges (A->B and B->A are the same road segment)
+            var processed = new HashSet<long>();
+
+            foreach (var edge in _edges)
+            {
+                int lo = Mathf.Min(edge.FromId, edge.ToId);
+                int hi = Mathf.Max(edge.FromId, edge.ToId);
+                long key = ((long)lo << 32) | (uint)hi;
+                if (!processed.Add(key)) continue;
+
+                Vector2 a = GetNode(edge.FromId).Position;
+                Vector2 b = GetNode(edge.ToId).Position;
+                float segLen = Vector2.Distance(a, b);
+
+                int count = Mathf.FloorToInt(segLen / spacing);
+                for (int j = 1; j <= count; j++)
+                {
+                    float t = (float)j / (count + 1);
+                    Vector2 pos = Vector2.Lerp(a, b, t);
+
+                    // Reject if too close to any node
+                    bool tooCloseToNode = false;
+                    foreach (var node in _nodes)
+                    {
+                        if (Vector2.Distance(pos, node.Position) < minDistFromNode)
+                        {
+                            tooCloseToNode = true;
+                            break;
+                        }
+                    }
+                    if (tooCloseToNode) continue;
+
+                    // Reject if too close to existing stop
+                    bool tooCloseToStop = false;
+                    foreach (var stop in _stops)
+                    {
+                        if (Vector2.Distance(pos, stop.Position) < minDistBetweenStops)
+                        {
+                            tooCloseToStop = true;
+                            break;
+                        }
+                    }
+                    if (tooCloseToStop) continue;
+
+                    _stops.Add(new TransitStop
+                    {
+                        Position = pos,
+                        EdgeFromId = edge.FromId,
+                        EdgeToId = edge.ToId
+                    });
+                }
+            }
+
+            Debug.Log($"[TransitGraph] Generated {_stops.Count} transit stops (spacing={spacing}, minNodeDist={minDistFromNode}, minStopDist={minDistBetweenStops})");
         }
 
         /// <summary>Shortest path from startId to all nodes. Returns distances (key = node id, value = distance). Use float.MaxValue for unreachable.</summary>
@@ -167,6 +242,32 @@ namespace CityTwin.Simulation
                 });
             }
 
+            results.Sort((x, y) => x.Distance.CompareTo(y.Distance));
+            return results;
+        }
+
+        public struct StopConnectionPoint
+        {
+            public Vector2 Position;
+            public float Distance;
+            public int StopIndex;
+        }
+
+        /// <summary>Find all stops within range of buildingPos, sorted by distance.</summary>
+        public List<StopConnectionPoint> GetStopConnections(Vector2 buildingPos, float range)
+        {
+            var results = new List<StopConnectionPoint>();
+            for (int i = 0; i < _stops.Count; i++)
+            {
+                float dist = Vector2.Distance(buildingPos, _stops[i].Position);
+                if (dist >= range) continue;
+                results.Add(new StopConnectionPoint
+                {
+                    Position = _stops[i].Position,
+                    Distance = dist,
+                    StopIndex = i
+                });
+            }
             results.Sort((x, y) => x.Distance.CompareTo(y.Distance));
             return results;
         }

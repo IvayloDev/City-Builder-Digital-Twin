@@ -39,6 +39,7 @@ namespace CityTwin.Config
         public BuildingDto[] buildings;
         public GameConfig.MapData map;
         public GameConfig.TooltipsData tooltips;
+        public GameConfig.StopsData stops;
         public GameConfig.TutorialData tutorial;
         public GameConfig.InactivityData inactivity;
         public GameConfig.EndMessageData[] endMessages;

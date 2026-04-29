@@ -56,7 +56,7 @@ namespace CityTwin.Core
         public void SetMetricState(float env, float eco, float safety, float culture)
         {
             const float maxFill = 0.25f;
-            const float metricCap = 20f; // same as qolCapPerMetric — 20 = full slice
+            const float metricCap = 100f; // values are percentages (0-100)
             if (environmentFillImage != null) environmentFillImage.fillAmount = Mathf.Clamp01(env / metricCap) * maxFill;
             if (economyFillImage != null) economyFillImage.fillAmount = Mathf.Clamp01(eco / metricCap) * maxFill;
             if (safetyFillImage != null) safetyFillImage.fillAmount = Mathf.Clamp01(safety / metricCap) * maxFill;

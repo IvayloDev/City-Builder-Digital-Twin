@@ -18,6 +18,7 @@ namespace CityTwin.Config
         public BuildingDefinition[] Buildings;
         public MapData Map;
         public TooltipsData Tooltips;
+        public StopsData Stops;
         public TutorialData Tutorial;
         public InactivityData Inactivity;
         public EndMessageData[] EndMessages;
@@ -81,10 +82,43 @@ namespace CityTwin.Config
         [Serializable]
         public class ScoringData
         {
-            public float qolCapPerMetric = 20f;
-            public float epsilonDistance = 0.1f;
-            /// <summary>Divides raw population (e.g. 80000) so the formula produces gradual metric values. Default 1000 → 80000 becomes 80.</summary>
-            public float populationScale = 1000f;
+            public float epsilonDistance = 1f;
+            /// <summary>Normalization constant. One full contribution ≈ 1×NORM raw → 100%. HTML default 150.</summary>
+            public float norm = 150f;
+            /// <summary>Equal weight for all districts. HTML default 100000.</summary>
+            public float equalDistrictWeight = 100000f;
+            /// <summary>Divides building baseValue to normalize raw influence. Higher = weaker per-building impact.</summary>
+            public float influenceRefBase = 20f;
+            /// <summary>Reference distance (metres) for decay curve. At path = ref, curve = 0.5^exp. HTML default 15.</summary>
+            public float influenceReferenceMeters = 15f;
+            /// <summary>Exponent for distance decay curve. Higher = steeper falloff. HTML default 1.</summary>
+            public float distanceExponent = 1f;
+            /// <summary>Minimum effective distance in game units (prevents near-zero path from inflating score). HTML default 50.</summary>
+            public float distanceFloor = 50f;
+            /// <summary>Converts game units to metres (gameUnits / distanceScale = metres). HTML: 100px = 1m.</summary>
+            public float distanceScale = 100f;
+            /// <summary>Base max road-network distance in game units. Multiplied by building connectionDistanceMult. HTML: 1.5m × 100 = 150.</summary>
+            public float maxRoadDistance = 150f;
+            /// <summary>Balance penalty: city QOL = mean(hubQol) − penalty × (maxHubQol − minHubQol). HTML default 0.5.</summary>
+            public float qolBalancePenalty = 0.5f;
+            /// <summary>Hard cap on final QOL score.</summary>
+            public float qolCap = 80f;
+            public float sizeBoostSmall = 1.2f;
+            public float sizeBoostMedium = 1.1f;
+            public float sizeBoostLarge = 1f;
+            /// <summary>nearCap for direct-range (0 transport hops) small buildings. HTML default 0.5.</summary>
+            public float nearCapSmall = 0.5f;
+            public float nearCapMedium = 0.75f;
+            public float nearCapLarge = 1f;
+            /// <summary>Impact radius (seed stop search) per building size. Buildings find stops within this radius for scoring.</summary>
+            public float impactRadiusSmall = 75f;
+            public float impactRadiusMedium = 112f;
+            public float impactRadiusLarge = 150f;
+            /// <summary>Pillar weight for per-hub QOL weighted average.</summary>
+            public float qolWeightEnv = 1f;
+            public float qolWeightEco = 1f;
+            public float qolWeightSaf = 1f;
+            public float qolWeightCul = 1f;
         }
 
         [Serializable]
@@ -127,6 +161,14 @@ namespace CityTwin.Config
             public int max;
             public string titleKey;
             public string bodyKey;
+        }
+
+        [Serializable]
+        public class StopsData
+        {
+            public float spacing = 60f;
+            public float minDistanceFromNode = 30f;
+            public float minDistanceBetweenStops = 30f;
         }
 
         [Serializable]

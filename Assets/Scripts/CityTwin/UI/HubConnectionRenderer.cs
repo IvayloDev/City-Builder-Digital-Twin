@@ -35,26 +35,33 @@ namespace CityTwin.UI
         [SerializeField] private SimulationEngine simulationEngine;
         [SerializeField] private HubLayoutManager hubLayoutManager;
 
-        [Header("Building -> Road (two-layer)")]
-        [SerializeField] private Color buildingRoadBgColor = new Color(0.486f, 0.549f, 0.627f, 0.25f); // #7c8ca0 at 25%
-        [SerializeField] private Color buildingRoadFgColor = new Color(0.486f, 0.549f, 0.627f, 0.50f); // #7c8ca0 at 50%
-        [SerializeField] private float bgThickness = 7f;
-        [SerializeField] private float fgThickness = 3f;
-
         [Header("Hub -> Hub")]
         [SerializeField] private bool drawHubToHubConnections = true;
         [SerializeField] private bool useHubToHubColorOverride = true;
         [SerializeField] private Color hubToHubColor = new Color(0.5f, 0.85f, 1f, 0.7f);
 
-        private readonly Dictionary<(string tileId, int snapIndex), IConnectionVisual> _buildingRoadBg =
+        [Header("Building -> Stop")]
+        [SerializeField] private Color buildingStopCloseColor = new Color(0f, 0.8f, 1f, 0.85f);
+        [SerializeField] private Color buildingStopFarColor = new Color(0f, 0.8f, 1f, 0.12f);
+        [SerializeField] private float buildingStopThickness = 3f;
+        [Tooltip("Distance threshold: closer than this = solid/close color, further = semi-transparent/far color.")]
+        [SerializeField] private float stopCloseDistanceThreshold = 150f;
+
+        [Header("Transit Stops")]
+        [Tooltip("Prefab for stop markers. Should be a small UI element (e.g. Image). Will be rotated 45 degrees to form a diamond.")]
+        [SerializeField] private GameObject stopMarkerPrefab;
+        [SerializeField] private float stopMarkerSize = 12f;
+        [SerializeField] private bool drawStops = true;
+
+        private readonly Dictionary<(string tileId, int stopIdx), IConnectionVisual> _buildingStopLines =
             new Dictionary<(string, int), IConnectionVisual>();
-        private readonly Dictionary<(string tileId, int snapIndex), IConnectionVisual> _buildingRoadFg =
-            new Dictionary<(string, int), IConnectionVisual>();
+        private readonly HashSet<(string, int)> _currentBuildingStopKeys = new HashSet<(string, int)>();
         private readonly Dictionary<(int hubA, int hubB), IConnectionVisual> _activeHubHub =
             new Dictionary<(int, int), IConnectionVisual>();
         private readonly List<IConnectionVisual> _pool = new List<IConnectionVisual>();
-        private readonly HashSet<(string, int)> _currentBuildingRoadKeys = new HashSet<(string, int)>();
         private readonly HashSet<(int, int)> _currentHubHubKeys = new HashSet<(int, int)>();
+        private readonly List<RectTransform> _activeStopMarkers = new List<RectTransform>();
+        private readonly List<RectTransform> _stopMarkerPool = new List<RectTransform>();
 
         private void Awake()
         {
@@ -85,14 +92,11 @@ namespace CityTwin.UI
 
         private void Refresh()
         {
-            if (buildingSpawner == null || connectionPrefab == null)
-                return;
+            if (buildingSpawner == null || connectionPrefab == null) return;
 
             RectTransform root = buildingSpawner.ContentRoot != null ? buildingSpawner.ContentRoot : contentRootOverride;
-            if (root == null)
-                return;
+            if (root == null) return;
 
-            _currentBuildingRoadKeys.Clear();
             _currentHubHubKeys.Clear();
             bool useTableSpace = (root == buildingSpawner.ContentRoot);
 
@@ -101,58 +105,50 @@ namespace CityTwin.UI
             EnsureHolderSetup(buildingRoadLineHolder);
             EnsureHolderSetup(hubHubLineHolder);
 
-            // --- Building -> Road snap-point lines (two layers) ---
+
+
+            // --- Building -> Stop lines (distance-based opacity) ---
+            _currentBuildingStopKeys.Clear();
             if (simulationEngine != null)
             {
-                var roadConnections = simulationEngine.ActiveRoadConnections;
-                var perTileSnapIndex = new Dictionary<string, int>();
+                var stopConnections = simulationEngine.ActiveStopConnections;
+                var perTileStopIndex = new Dictionary<string, int>();
 
-                for (int i = 0; i < roadConnections.Count; i++)
+                for (int i = 0; i < stopConnections.Count; i++)
                 {
-                    var rc = roadConnections[i];
+                    var sc = stopConnections[i];
 
                     Vector2 buildingPos;
                     bool gotBuilding = useTableSpace
-                        ? buildingSpawner.TryGetMarkerPosition(rc.TileId, out buildingPos)
-                        : buildingSpawner.TryGetMarkerPositionIn(rc.TileId, root, out buildingPos);
+                        ? buildingSpawner.TryGetMarkerPosition(sc.TileId, out buildingPos)
+                        : buildingSpawner.TryGetMarkerPositionIn(sc.TileId, root, out buildingPos);
                     if (!gotBuilding) continue;
 
-                    if (!perTileSnapIndex.TryGetValue(rc.TileId, out int snapIdx))
-                        snapIdx = 0;
-                    perTileSnapIndex[rc.TileId] = snapIdx + 1;
+                    if (!perTileStopIndex.TryGetValue(sc.TileId, out int sIdx))
+                        sIdx = 0;
+                    perTileStopIndex[sc.TileId] = sIdx + 1;
 
-                    var key = (rc.TileId, snapIdx);
-                    _currentBuildingRoadKeys.Add(key);
+                    var key = (sc.TileId, sIdx);
+                    _currentBuildingStopKeys.Add(key);
 
-                    Vector2 brFrom = RootToHolderSpace(buildingPos, root, brParent);
-                    Vector2 brTo = RootToHolderSpace(rc.SnapPoint, root, brParent);
+                    Vector2 from = RootToHolderSpace(buildingPos, root, brParent);
+                    Vector2 to = RootToHolderSpace(sc.StopPosition, root, brParent);
 
-                    // Layer 1: Background (wide, dim)
-                    if (!_buildingRoadBg.TryGetValue(key, out IConnectionVisual bgVisual))
+                    Color lineColor = sc.Distance <= stopCloseDistanceThreshold
+                        ? buildingStopCloseColor
+                        : buildingStopFarColor;
+
+                    if (!_buildingStopLines.TryGetValue(key, out IConnectionVisual visual))
                     {
-                        bgVisual = Acquire(brParent);
-                        if (bgVisual != null)
-                            _buildingRoadBg[key] = bgVisual;
+                        visual = Acquire(brParent);
+                        if (visual != null)
+                            _buildingStopLines[key] = visual;
                     }
-                    if (bgVisual != null)
+                    if (visual != null)
                     {
-                        bgVisual.UpdateEndpoints(brFrom, brTo);
-                        ApplyStyle(bgVisual, buildingRoadBgColor, bgThickness);
-                        bgVisual.SetActive(true);
-                    }
-
-                    // Layer 2: Foreground (thin, brighter)
-                    if (!_buildingRoadFg.TryGetValue(key, out IConnectionVisual fgVisual))
-                    {
-                        fgVisual = Acquire(brParent);
-                        if (fgVisual != null)
-                            _buildingRoadFg[key] = fgVisual;
-                    }
-                    if (fgVisual != null)
-                    {
-                        fgVisual.UpdateEndpoints(brFrom, brTo);
-                        ApplyStyle(fgVisual, buildingRoadFgColor, fgThickness);
-                        fgVisual.SetActive(true);
+                        visual.UpdateEndpoints(from, to);
+                        ApplyStyle(visual, lineColor, buildingStopThickness);
+                        visual.SetActive(true);
                     }
                 }
             }
@@ -193,10 +189,11 @@ namespace CityTwin.UI
                 }
             }
 
-            // --- Deactivate unused building-road visuals (bg layer) ---
-            RecycleStale(_buildingRoadBg, _currentBuildingRoadKeys);
-            // --- Deactivate unused building-road visuals (fg layer) ---
-            RecycleStale(_buildingRoadFg, _currentBuildingRoadKeys);
+            // --- Transit Stop markers ---
+            RefreshStopMarkers(root);
+
+            // --- Deactivate unused building-stop visuals ---
+            RecycleStale(_buildingStopLines, _currentBuildingStopKeys);
 
             // --- Deactivate unused hub-hub visuals ---
             var toRemoveHubHub = new List<(int, int)>();
@@ -333,11 +330,70 @@ namespace CityTwin.UI
             return new Vector2(local3d.x, local3d.y) - pivotCorrection;
         }
 
+        private void RefreshStopMarkers(RectTransform root)
+        {
+            // Return all active markers to pool
+            foreach (var rt in _activeStopMarkers)
+            {
+                if (rt != null)
+                {
+                    rt.gameObject.SetActive(false);
+                    _stopMarkerPool.Add(rt);
+                }
+            }
+            _activeStopMarkers.Clear();
+
+            if (!drawStops) return;
+            if (stopMarkerPrefab == null || simulationEngine == null) return;
+
+            var graph = simulationEngine.TransitGraph;
+            if (graph == null) return;
+
+            var stops = graph.Stops;
+            if (stops.Count == 0) return;
+
+            RectTransform parent = hubHubLineHolder != null ? hubHubLineHolder : root;
+
+            for (int i = 0; i < stops.Count; i++)
+            {
+                Vector2 pos = RootToHolderSpace(stops[i].Position, root, parent);
+                RectTransform marker = AcquireStopMarker(parent);
+                marker.anchoredPosition = pos;
+                marker.sizeDelta = new Vector2(stopMarkerSize, stopMarkerSize);
+                marker.localRotation = Quaternion.Euler(0, 0, 45f);
+                marker.gameObject.SetActive(true);
+                _activeStopMarkers.Add(marker);
+            }
+
+        }
+
+        private RectTransform AcquireStopMarker(RectTransform parent)
+        {
+            for (int i = _stopMarkerPool.Count - 1; i >= 0; i--)
+            {
+                var rt = _stopMarkerPool[i];
+                if (rt != null)
+                {
+                    _stopMarkerPool.RemoveAt(i);
+                    if (rt.parent != parent) rt.SetParent(parent, false);
+                    return rt;
+                }
+                _stopMarkerPool.RemoveAt(i);
+            }
+
+            var go = Instantiate(stopMarkerPrefab, parent);
+            var rect = go.GetComponent<RectTransform>();
+            if (rect == null) rect = go.AddComponent<RectTransform>();
+            rect.anchorMin = new Vector2(0.5f, 0.5f);
+            rect.anchorMax = new Vector2(0.5f, 0.5f);
+            rect.pivot = new Vector2(0.5f, 0.5f);
+            return rect;
+        }
+
         /// <summary>Remove all visuals and return them to pool. Call on reset.</summary>
         public void ClearAll()
         {
-            ClearDict(_buildingRoadBg);
-            ClearDict(_buildingRoadFg);
+            ClearDict(_buildingStopLines);
 
             foreach (var kv in _activeHubHub)
             {
@@ -348,6 +404,16 @@ namespace CityTwin.UI
                 }
             }
             _activeHubHub.Clear();
+
+            foreach (var rt in _activeStopMarkers)
+            {
+                if (rt != null)
+                {
+                    rt.gameObject.SetActive(false);
+                    _stopMarkerPool.Add(rt);
+                }
+            }
+            _activeStopMarkers.Clear();
         }
 
         private void ClearDict(Dictionary<(string, int), IConnectionVisual> dict)

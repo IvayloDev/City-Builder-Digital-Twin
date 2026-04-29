@@ -1,4 +1,5 @@
 #if UNITY_INCLUDE_TESTS
+using CityTwin.Config;
 using CityTwin.Core;
 using CityTwin.Simulation;
 using NUnit.Framework;
@@ -16,6 +17,7 @@ public class SimulationEngineTests
             new BuildingDefinition
             {
                 Id = "garden",
+                ImpactSize = "Small",
                 Importance = 0.6f,
                 BaseValues = new BuildingDefinition.MetricValues { environment = 5, economy = 2, healthSafety = -2, cultureEdu = 2 }
             }
@@ -25,8 +27,9 @@ public class SimulationEngineTests
         graph.AddNode(new Vector2(0, 0), 100f);
         graph.AddNode(new Vector2(500, 0), 50f);
         graph.AddEdge(0, 1, 500f);
+        graph.GenerateStops(180f, 30f, 30f);
         engine.SetTransitGraph(graph);
-        engine.SetConfig(0.1f, 20f, 0.5f, 200f, 200f, 500f);
+        engine.SetConfig(new GameConfig.ScoringData(), new GameConfig.AccessibilityData { roadConnectRange = 500f, defaultConnectionRadius = 600f });
 
         float qolAfterAdd = 0f;
         engine.OnMetricsChanged += () => qolAfterAdd = engine.Qol;
@@ -41,14 +44,14 @@ public class SimulationEngineTests
     }
 
     [Test]
-    public void Qol_IsClampedBetween0And100()
+    public void Qol_IsClampedBetween0AndCap()
     {
         var go = new GameObject("Engine");
         var engine = go.AddComponent<SimulationEngine>();
         engine.SetBuildingCatalog(new System.Collections.Generic.List<BuildingDefinition>());
         engine.SetTransitGraph(new TransitGraph());
         engine.RecalculateMetrics();
-        Assert.That(engine.Qol, Is.GreaterThanOrEqualTo(0f).And.LessThanOrEqualTo(100f));
+        Assert.That(engine.Qol, Is.GreaterThanOrEqualTo(0f).And.LessThanOrEqualTo(80f));
     }
 }
 #endif
