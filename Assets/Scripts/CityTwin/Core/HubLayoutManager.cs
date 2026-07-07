@@ -1,5 +1,4 @@
 using System.Collections.Generic;
-using System.IO;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -39,6 +38,17 @@ namespace CityTwin.Core
         private void Awake()
         {
             PickPresetForRound();
+            // On WebGL the saved layout arrives over HTTP after Awake, so the first pick is
+            // random. Re-pin to the saved preset as soon as the layout JSON is available.
+            StartCoroutine(RepinWhenLayoutLoaded());
+        }
+
+        private System.Collections.IEnumerator RepinWhenLayoutLoaded()
+        {
+            yield return RoadLayoutStore.EnsureLoaded();
+            int pinned = FindSavedPresetIndex();
+            if (pinned >= 0 && presets[pinned] != ActivePreset)
+                ActivateIndex(pinned);
         }
 
         /// <summary>Select the preset for a round: the one pinned by the saved road layout when
@@ -79,9 +89,11 @@ namespace CityTwin.Core
         {
             try
             {
-                string path = RoadNetworkEditor.SharedLayoutPath;
-                if (!File.Exists(path)) return -1;
-                var peek = JsonUtility.FromJson<LayoutPeek>(File.ReadAllText(path));
+                // Read the cached JSON (RoadLayoutStore handles disk vs WebGL HTTP). Before the
+                // store resolves this returns -1 and the round starts on a random preset;
+                // RepinWhenLayoutLoaded corrects it once the layout arrives.
+                if (!RoadLayoutStore.Resolved || string.IsNullOrEmpty(RoadLayoutStore.Json)) return -1;
+                var peek = JsonUtility.FromJson<LayoutPeek>(RoadLayoutStore.Json);
                 if (peek == null || string.IsNullOrEmpty(peek.preset)) return -1;
 
                 for (int i = 0; i < presets.Count; i++)

@@ -53,9 +53,9 @@ public class RoadNetworkEditor : MonoBehaviour
 
     /// <summary>All game instances share one layout file: the quadrants are copies of the same
     /// map, and the old per-instance naming (road_layout_&lt;GameObject name&gt;.json) meant a layout
-    /// edited on instance 1 never reached the other three copies. Public so HubLayoutManager can
-    /// peek the pinned preset name from the same file.</summary>
-    public static string SharedLayoutPath => Path.Combine(Application.streamingAssetsPath, "road_layout.json");
+    /// edited on instance 1 never reached the other three copies. Loading goes through
+    /// RoadLayoutStore so WebGL (where StreamingAssets is a URL, not a directory) works too.</summary>
+    public static string SharedLayoutPath => RoadLayoutStore.SharedPath;
     private static string SharedPath => SharedLayoutPath;
 
     /// <summary>Legacy per-instance file name, kept for migration of existing layouts.</summary>
@@ -68,26 +68,6 @@ public class RoadNetworkEditor : MonoBehaviour
             safe = safe.Replace(' ', '_');
             return Path.Combine(Application.streamingAssetsPath, "road_layout_" + safe + ".json");
         }
-    }
-
-    /// <summary>Where to load from: the shared file when present, otherwise this instance's legacy
-    /// file, otherwise ANY legacy road_layout_*.json (all quadrants share the same map, so the
-    /// first instance's old file is a valid layout for every copy).</summary>
-    private string ResolveLoadPath()
-    {
-        if (File.Exists(SharedPath)) return SharedPath;
-        if (File.Exists(LegacyInstancePath)) return LegacyInstancePath;
-        try
-        {
-            var candidates = Directory.GetFiles(Application.streamingAssetsPath, "road_layout_*.json");
-            if (candidates.Length > 0)
-            {
-                System.Array.Sort(candidates);
-                return candidates[0];
-            }
-        }
-        catch { /* StreamingAssets may be unreadable on some platforms; fall through */ }
-        return null;
     }
 
     private void Awake()
@@ -109,14 +89,17 @@ public class RoadNetworkEditor : MonoBehaviour
 
     private IEnumerator Start()
     {
-        yield return ApplyWhenHubsReady();
-
-        // Round restarts re-pick the layout preset; re-apply the saved roads every time so
-        // the custom map survives the whole day, not just the first round.
+        // Subscribe BEFORE the first apply: on WebGL the saved layout arrives over HTTP and
+        // HubLayoutManager may re-pin its preset while the first apply is still waiting on the
+        // fetch - subscribing late would miss that event and leave the wrong map until restart.
+        // Round restarts also re-pick the preset; re-applying on every activation keeps the
+        // custom map alive the whole day, not just the first round.
         _layoutManager = GetComponentInChildren<HubLayoutManager>(true);
         if (_layoutManager == null && coordinator != null)
             _layoutManager = coordinator.GetComponentInChildren<HubLayoutManager>(true);
         if (_layoutManager != null) _layoutManager.OnPresetActivated += HandlePresetActivated;
+
+        yield return ApplyWhenHubsReady();
     }
 
     private void OnDestroy()
@@ -144,6 +127,8 @@ public class RoadNetworkEditor : MonoBehaviour
             yield return null;
         }
         yield return null;
+        // Fetch the shared layout first: instant on desktop, an HTTP request on WebGL.
+        yield return RoadLayoutStore.EnsureLoaded();
         LoadAndApply();
     }
 
@@ -189,8 +174,11 @@ public class RoadNetworkEditor : MonoBehaviour
 
         try
         {
+            string json = JsonUtility.ToJson(data, true);
             Directory.CreateDirectory(Path.GetDirectoryName(SharedPath));
-            File.WriteAllText(SharedPath, JsonUtility.ToJson(data, true));
+            File.WriteAllText(SharedPath, json);
+            // Keep the in-memory copy current so restarts this session reload the new layout.
+            RoadLayoutStore.UpdateCache(json);
             // The shared file supersedes this instance's legacy file; remove it so it can never
             // shadow the shared layout on future loads.
             if (File.Exists(LegacyInstancePath))
@@ -213,21 +201,20 @@ public class RoadNetworkEditor : MonoBehaviour
 
     public void LoadAndApply()
     {
-        string loadPath = ResolveLoadPath();
-        if (loadPath == null)
+        string json = RoadLayoutStore.Json;
+        if (string.IsNullOrEmpty(json))
         {
             // Loud on purpose: a build that ships without the layout used to fail silently and
             // players just saw the default map. This line makes the player log diagnostic.
-            Debug.LogWarning("[RoadNetworkEditor] No road layout found (looked for " + SharedPath
-                + " and road_layout_*.json in " + Application.streamingAssetsPath + ") - using default map.");
+            Debug.LogWarning("[RoadNetworkEditor] No road layout found (" + SharedPath + ") - using default map.");
             return;
         }
         if (hubRegistry == null || connectionRenderer == null) return;
-        Debug.Log("[RoadNetworkEditor] Loading road layout: " + loadPath);
+        Debug.Log("[RoadNetworkEditor] Applying road layout from " + SharedPath);
 
         SavedLayout data;
-        try { data = JsonUtility.FromJson<SavedLayout>(File.ReadAllText(loadPath)); }
-        catch (System.Exception e) { Debug.LogWarning("[RoadNetworkEditor] Failed to read layout: " + e.Message); return; }
+        try { data = JsonUtility.FromJson<SavedLayout>(json); }
+        catch (System.Exception e) { Debug.LogWarning("[RoadNetworkEditor] Failed to parse layout: " + e.Message); return; }
         if (data == null) return;
 
         hubRegistry.FetchHubs();
