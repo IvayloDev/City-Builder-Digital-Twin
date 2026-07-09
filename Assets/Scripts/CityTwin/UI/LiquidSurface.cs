@@ -157,7 +157,13 @@ namespace CityTwin.UI
 
         private RenderTexture CreateRT()
         {
-            var rt = new RenderTexture(_simW, _simH, 0, RenderTextureFormat.RGHalf)
+            // The sim stores signed heights, so it needs a float format. RGHalf is the
+            // cheapest; some WebGL/mobile targets only expose the 4-channel variants.
+            RenderTextureFormat fmt =
+                SystemInfo.SupportsRenderTextureFormat(RenderTextureFormat.RGHalf) ? RenderTextureFormat.RGHalf :
+                SystemInfo.SupportsRenderTextureFormat(RenderTextureFormat.ARGBHalf) ? RenderTextureFormat.ARGBHalf :
+                RenderTextureFormat.ARGBFloat;
+            var rt = new RenderTexture(_simW, _simH, 0, fmt)
             {
                 filterMode = FilterMode.Bilinear,
                 wrapMode = TextureWrapMode.Clamp,
