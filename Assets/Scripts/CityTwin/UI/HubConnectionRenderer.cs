@@ -116,7 +116,7 @@ namespace CityTwin.UI
         [SerializeField] private float stopCloseDistanceThreshold = 150f;
 
         [Header("Building -> Hub (direct)")]
-        [SerializeField] private Color buildingHubColor = new Color(0.2f, 1f, 0.4f, 0.7f);
+        [SerializeField] private Color buildingHubColor = new Color(0f, 0.8f, 1f, 0.85f);
         [SerializeField] private float buildingHubThickness = 3f;
 
         [Header("Connection thinning")]

@@ -96,6 +96,8 @@ namespace CityTwin.UI
         [SerializeField] private Color bubbleTextColor = Color.white;
         [Tooltip("Bubble background sprite for hub tips. When set, wins over copying the robot popup's bubble style.")]
         [SerializeField] private Sprite bubbleSpriteOverride;
+        [Tooltip("Prefab for hub reaction bubbles: root with CanvasGroup + Image, TMP text in children. When set, it replaces the code-built bubble entirely (sprite/color/size fields above no longer apply); text, position and lifetime are still driven here.")]
+        [SerializeField] private GameObject reactionBubblePrefab;
 
         [Header("Reaction thresholds (pillar %, 0-100)")]
         [Tooltip("At or below this level a commented pillar produces a negative reaction.")]
@@ -1486,6 +1488,35 @@ namespace CityTwin.UI
             }
 
             DestroyCurrentBubble();
+
+            // Prefab path: designers own the bubble's look; code only fills text, places it
+            // at the hub and runs the shared lifetime routine.
+            if (reactionBubblePrefab != null)
+            {
+                var pgo = Instantiate(reactionBubblePrefab, contentRoot);
+                pgo.name = "ReactionBubble";
+                var prt = (RectTransform)pgo.transform;
+                var pcg = pgo.GetComponent<CanvasGroup>();
+                if (pcg == null) pcg = pgo.AddComponent<CanvasGroup>();
+                pcg.blocksRaycasts = false;
+                pcg.interactable = false;
+                var ptmp = pgo.GetComponentInChildren<TextMeshProUGUI>(true);
+                if (ptmp != null) ptmp.text = text;
+
+                LayoutRebuilder.ForceRebuildLayoutImmediate(prt);
+
+                if (viaRegistry)
+                    prt.localPosition = hubLocal + new Vector3(0f, bubbleHubGap, 0f);
+                else
+                    prt.anchoredPosition = (Vector2)hubLocal + new Vector2(0f, bubbleHubGap);
+
+                _hubLastTime[hubIndex] = Time.unscaledTime;
+                _lastTipTime = Time.time;
+                _currentBubble = pgo;
+                if (_bubbleRoutine != null) StopCoroutine(_bubbleRoutine);
+                _bubbleRoutine = StartCoroutine(BubbleRoutine(prt, pcg, pgo));
+                return;
+            }
 
             var go = new GameObject("ReactionBubble", typeof(RectTransform));
             var rt = (RectTransform)go.transform;

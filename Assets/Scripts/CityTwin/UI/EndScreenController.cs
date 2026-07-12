@@ -25,6 +25,9 @@ namespace CityTwin.UI
         [SerializeField] private TextMeshProUGUI endBodyText;
         [SerializeField] private TextMeshProUGUI QOLText;
 
+        [Tooltip("Seconds the end panel fades in over when the session ends (CanvasGroup alpha 0 -> 1).")]
+        [SerializeField] private float endPanelFadeSeconds = 1.5f;
+
         [Header("Restart Flow UI")]
         [Tooltip("Text shown during the restart flow (remove-tiles prompt, then countdown).")]
         [SerializeField] private TextMeshProUGUI restartStatusText;
@@ -58,6 +61,8 @@ namespace CityTwin.UI
         [SerializeField] private Graphic mapGraphic;
         [Tooltip("Seconds per fade stage of the end transition: (1) map+UI out / roads dim, (2) roads+particles out, (3) message up.")]
         [SerializeField] private float completionFadeSeconds = 0.8f;
+        [Tooltip("Extra pause before the clear-table message fades up, after everything else has left the screen. Applies to the natural end and the direct jump (idle end) alike.")]
+        [SerializeField] private float messageDelaySeconds = 1f;
         [Tooltip("Road network alpha during stage 1, before it fades out fully in stage 2.")]
         [Range(0f, 1f)] [SerializeField] private float completionRoadDim = 0.4f;
 
@@ -76,8 +81,6 @@ namespace CityTwin.UI
         [SerializeField] private TextMeshProUGUI balanceBodyText;
         [Tooltip("Body text of the Strategic card (reaction.*.access.v2 localization). Set by TutorialSequenceController.")]
         [SerializeField] private TextMeshProUGUI strategicBodyText;
-        [Tooltip("Body text of the Budget card: remaining budget line. Set by TutorialSequenceController.")]
-        [SerializeField] private TextMeshProUGUI budgetBodyText;
 
         public bool IsVisible => endPanel != null && endPanel.activeSelf;
 
@@ -86,7 +89,18 @@ namespace CityTwin.UI
         /// big completion/restart message (see <see cref="CompletionPhaseRoutine"/>).</summary>
         public void Show(string title, string body)
         {
-            if (endPanel != null) endPanel.SetActive(true);
+            if (endPanel != null)
+            {
+                endPanel.SetActive(true);
+                // Fade the whole overlay up instead of popping it on. Unscaled time: the end
+                // screen must animate even if the session freeze stops timeScale.
+                var cg = GetOrAddGroup(endPanel);
+                DOTween.Kill(cg);
+                cg.alpha = 0f;
+                cg.blocksRaycasts = true; // block the table immediately, not only after the fade
+                cg.DOFade(1f, Mathf.Max(0.01f, endPanelFadeSeconds))
+                    .SetEase(Ease.InOutSine).SetUpdate(true).SetTarget(cg);
+            }
             if (endTitleText != null) endTitleText.text = title ?? string.Empty;
             SetBody(body ?? string.Empty);
 
@@ -102,7 +116,14 @@ namespace CityTwin.UI
         {
             StopBodyCycle();
             StopCompletionPhase();
-            if (endPanel != null) endPanel.SetActive(false);
+            if (endPanel != null)
+            {
+                // Kill a mid-flight fade so a restart during the fade can't leave the panel
+                // half-transparent on its next Show.
+                var cg = endPanel.GetComponent<CanvasGroup>();
+                if (cg != null) { DOTween.Kill(cg); cg.alpha = 1f; }
+                endPanel.SetActive(false);
+            }
             SetRestartStatus(string.Empty);
         }
 
@@ -124,7 +145,6 @@ namespace CityTwin.UI
             Add(endBodyText);
             if (balanceBodyText != null) Add(balanceBodyText.transform.parent);
             if (strategicBodyText != null) Add(strategicBodyText.transform.parent);
-            if (budgetBodyText != null) Add(budgetBodyText.transform.parent);
             if (QOLText != null && QOLText.transform.parent != null)
             {
                 var caption = QOLText.transform.parent.Find("Your score Text");
@@ -182,46 +202,108 @@ namespace CityTwin.UI
                 _completionRoutine = StartCoroutine(CompletionPhaseRoutine());
         }
 
+        /// <summary>Jump straight to the clear-the-table message: skips the scorecard reading time
+        /// and runs the staged fade immediately. For flows that end the session without a player
+        /// (e.g. inactivity) — the score means nothing to an empty chair.</summary>
+        public void SkipToCompletionMessage()
+        {
+            if (!IsVisible || !isActiveAndEnabled) return;
+            StopBodyCycle();
+            if (_completionRoutine != null) StopCoroutine(_completionRoutine);
+            _completionRoutine = StartCoroutine(CompletionPhaseRoutine(0f, true));
+        }
+
+        /// <summary>Instant version of stages 1-2(+3 head): no tweens, no waits. Kills the panel's
+        /// own show fade too, so a direct jump shows nothing of the scorecard — the clear-table
+        /// message fading up is the only visible motion.</summary>
+        private void SnapToCompletionState()
+        {
+            if (endPanel != null)
+            {
+                // Keep (or restart) the panel's entrance fade instead of snapping it opaque:
+                // with the scorecard hidden below, the backdrop and the clear-table message
+                // fade up together as one unit.
+                var pcg = GetOrAddGroup(endPanel);
+                if (pcg.alpha < 0.99f)
+                {
+                    DOTween.Kill(pcg);
+                    pcg.DOFade(1f, Mathf.Max(0.1f, completionFadeSeconds))
+                        .SetEase(Ease.InOutSine).SetUpdate(true).SetTarget(pcg);
+                }
+            }
+            foreach (var go in ScorecardElements()) if (go != null) go.SetActive(false);
+            if (hideOnCompletion != null)
+                foreach (var go in hideOnCompletion)
+                {
+                    if (go == null) continue;
+                    var cg = GetOrAddGroup(go);
+                    DOTween.Kill(cg);
+                    cg.alpha = 0f;
+                    cg.blocksRaycasts = false;
+                }
+            var map = MapGraphic();
+            if (map != null) { DOTween.Kill(map); map.enabled = false; }
+            var cardBg = CardBackground();
+            if (cardBg != null) { DOTween.Kill(cardBg); cardBg.enabled = false; }
+        }
+
         /// <summary>Staged end transition: (1) scorecard + map + UI fade out while the road network
         /// dims, (2) roads and their flow particles fade away, (3) the clear-the-table message fades
-        /// up over the translucent card. Only the placed-tile pins survive all three stages.</summary>
-        private IEnumerator CompletionPhaseRoutine()
+        /// up over the translucent card. Only the placed-tile pins survive all three stages.
+        /// <paramref name="scorecardDelayOverride"/> &gt;= 0 replaces the configured scorecard wait.</summary>
+        private IEnumerator CompletionPhaseRoutine(float scorecardDelayOverride = -1f, bool instantStages = false)
         {
-            yield return new WaitForSecondsRealtime(Mathf.Max(1f, scorecardSeconds));
+            float wait = scorecardDelayOverride >= 0f ? scorecardDelayOverride : Mathf.Max(1f, scorecardSeconds);
+            if (wait > 0f)
+                yield return new WaitForSecondsRealtime(wait);
             StopBodyCycle();
             float stage = Mathf.Max(0.1f, completionFadeSeconds);
 
-            // Stage 1: scorecard and level UI fade out; the road network only dims for now.
-            // The map background PNG fades with them (its Image color doesn't cascade to the
-            // pins it parents, so they stay visible).
-            foreach (var go in ScorecardElements()) FadeGroup(go, 0f, stage);
-            foreach (var go in hideOnCompletion)
-                FadeGroup(go, IsRoadHolder(go) ? completionRoadDim : 0f, stage);
-            var map = MapGraphic();
-            if (map != null)
+            if (instantStages)
             {
-                DOTween.Kill(map);
-                map.DOFade(0f, stage).SetEase(Ease.InOutSine).SetUpdate(true).SetTarget(map);
+                // Direct jump (idle end): nothing of the scorecard may flash by.
+                SnapToCompletionState();
             }
-            yield return new WaitForSecondsRealtime(stage);
-
-            // Stage 2: the roads and their particles go too.
-            foreach (var go in hideOnCompletion)
-                if (IsRoadHolder(go)) FadeGroup(go, 0f, stage);
-            yield return new WaitForSecondsRealtime(stage);
-
-            // Stage 3: the card backdrop disappears with the scorecard — the clear-the-table
-            // message floats free over the pins. The faded map image is switched off entirely
-            // so nothing of the level PNG lingers either.
-            foreach (var go in ScorecardElements()) if (go != null) go.SetActive(false);
-            if (map != null) map.enabled = false;
-            var cardBg = CardBackground();
-            if (cardBg != null)
+            else
             {
-                DOTween.Kill(cardBg);
-                cardBg.DOFade(0f, stage).SetEase(Ease.InOutSine).SetUpdate(true).SetTarget(cardBg)
-                    .OnComplete(() => { if (cardBg != null) cardBg.enabled = false; });
+                // Stage 1: scorecard and level UI fade out; the road network only dims for now.
+                // The map background PNG fades with them (its Image color doesn't cascade to the
+                // pins it parents, so they stay visible).
+                foreach (var go in ScorecardElements()) FadeGroup(go, 0f, stage);
+                foreach (var go in hideOnCompletion)
+                    FadeGroup(go, IsRoadHolder(go) ? completionRoadDim : 0f, stage);
+                var map = MapGraphic();
+                if (map != null)
+                {
+                    DOTween.Kill(map);
+                    map.DOFade(0f, stage).SetEase(Ease.InOutSine).SetUpdate(true).SetTarget(map);
+                }
+                yield return new WaitForSecondsRealtime(stage);
+
+                // Stage 2: the roads and their particles go too.
+                foreach (var go in hideOnCompletion)
+                    if (IsRoadHolder(go)) FadeGroup(go, 0f, stage);
+                yield return new WaitForSecondsRealtime(stage);
+
+                // Stage 3: the card backdrop disappears with the scorecard — the clear-the-table
+                // message floats free over the pins. The faded map image is switched off entirely
+                // so nothing of the level PNG lingers either.
+                foreach (var go in ScorecardElements()) if (go != null) go.SetActive(false);
+                if (map != null) map.enabled = false;
+                var cardBg = CardBackground();
+                if (cardBg != null)
+                {
+                    DOTween.Kill(cardBg);
+                    cardBg.DOFade(0f, stage).SetEase(Ease.InOutSine).SetUpdate(true).SetTarget(cardBg)
+                        .OnComplete(() => { if (cardBg != null) cardBg.enabled = false; });
+                }
             }
+
+            // Breathing room: the stage is clear (or was skipped past); hold it a beat before
+            // the message speaks up.
+            if (messageDelaySeconds > 0f)
+                yield return new WaitForSecondsRealtime(messageDelaySeconds);
+
             if (restartStatusText != null)
             {
                 restartStatusText.gameObject.SetActive(true);
@@ -515,13 +597,12 @@ namespace CityTwin.UI
         {
             if (balanceBodyText != null) balanceBodyText.text = balanceBody ?? string.Empty;
             if (strategicBodyText != null) strategicBodyText.text = strategicBody ?? string.Empty;
-            UnifyFontSizes(balanceBodyText, strategicBodyText, budgetBodyText);
+            UnifyFontSizes(balanceBodyText, strategicBodyText);
         }
 
         /// <summary>Fill all three report cards, including the Budget card's remaining-budget line.</summary>
         public void SetReport(string balanceBody, string strategicBody, string budgetBody)
         {
-            if (budgetBodyText != null) budgetBodyText.text = budgetBody ?? string.Empty;
             SetReport(balanceBody, strategicBody); // unifies sizes across all three cards
         }
 
