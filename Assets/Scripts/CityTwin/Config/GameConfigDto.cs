@@ -41,6 +41,7 @@ namespace CityTwin.Config
         public GameConfig.TooltipsData tooltips;
         public GameConfig.StopsData stops;
         public GameConfig.TutorialData tutorial;
+        public GameConfig.TipsData tips;
         public GameConfig.InactivityData inactivity;
         public GameConfig.EndMessageData[] endMessages;
     }

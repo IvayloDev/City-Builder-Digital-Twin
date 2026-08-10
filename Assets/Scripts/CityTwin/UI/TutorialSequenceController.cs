@@ -19,7 +19,7 @@ namespace CityTwin.UI
     ///     firing OnTutorialComplete when done.
     ///   - Score bands: the end.* band message fires once, the first time city QOL crosses UP into a new band
     ///     (multi-band jumps show only the landed band; the 80-100 band is ignored because QOL caps at 80).
-    ///   - Citizen reactions (hybrid, timer-driven): every reactionIntervalSeconds after the tutorial, the pillar
+    ///   - Citizen reactions (hybrid, timer-driven): every ReactionIntervalSeconds after the tutorial, the pillar
     ///     that moved most since the last tick (or, failing that, the most extreme pillar by level) is commented
     ///     on; its level decides polarity (high = praise, low = complain, mid = silent) and the bubble appears
     ///     next to the hub most affected over that window. Uses reaction.*.v2 wording.
@@ -76,15 +76,12 @@ namespace CityTwin.UI
         [Header("Score-band popup")]
         [Tooltip("Popup for score-band messages. If null, reuses the first tutorial popup.")]
         [SerializeField] private TutorialPopup bandPopup;
-        [SerializeField] private float bandPopupSeconds = 6f;
 
         [Header("Citizen reactions")]
         [Tooltip("Fallback popup when hub bubbles are off or no play-field root. If null, reuses the first tutorial popup.")]
         [SerializeField] private TutorialPopup reactionPopup;
-        [SerializeField] private float reactionPopupSeconds = 4f;
         [Tooltip("When on, a reaction spawns a bubble over the most-relevant hub instead of the fallback popup.")]
         [SerializeField] private bool useHubBubbles = true;
-        [SerializeField] private float bubbleSeconds = 4f;
         [SerializeField] private float bubbleMaxWidth = 280f;
         [SerializeField] private float bubbleFontSize = 26f;
         [SerializeField] private float bubblePadding = 18f;
@@ -106,8 +103,6 @@ namespace CityTwin.UI
         [SerializeField, Range(0f, 100f)] private float highLevel = 70f;
         [Tooltip("Minimum pillar move (absolute %) since the last tick for the biggest-mover pick to win.")]
         [SerializeField] private float minDeltaToReact = 1f;
-        [Tooltip("Seconds between timed citizen reactions once the tutorial is over. Ticks with nothing to say stay silent.")]
-        [SerializeField] private float reactionIntervalSeconds = 25f;
         [Tooltip("Per-pillar minimum seconds before the same pillar is commented on again.")]
         [SerializeField] private float perPillarCooldown = 60f;
         [Tooltip("Minimum seconds before a bubble may anchor to the same hub again. Keeps bubbles moving around the map; ignored when no other hub qualifies.")]
@@ -326,6 +321,9 @@ namespace CityTwin.UI
             if (startIndex == 0)
                 yield return CityRevealRoutine();
 
+            // Stat-demo pacing lives in game_config.json ("tutorial.metric*Seconds") so it can be
+            // retuned on site without a rebuild; the constants below are the no-config fallback.
+
             var steps = configLoader?.Config?.Tutorial?.steps;
             if (steps == null || steps.Length == 0 || popups == null || popups.Length == 0)
             {
@@ -378,8 +376,8 @@ namespace CityTwin.UI
                 if (action == "scoreGlow" && dashboard != null)
                 {
                     StageFocus("Quality Of Life");
-                    dashboard.HighlightPillar(DashboardController.Pillar.Qol, 1.8f);
-                    dashboard.PlayQolMaxDemo(1.8f);
+                    dashboard.HighlightPillar(DashboardController.Pillar.Qol, MetricSweepSeconds);
+                    dashboard.PlayQolMaxDemo(MetricRiseSeconds, MetricHoldSeconds);
                 }
                 else if (action == "hubSpawn")
                 {
@@ -402,19 +400,24 @@ namespace CityTwin.UI
                         (DashboardController.Pillar.HealthSafety, "Safety", 2),
                         (DashboardController.Pillar.CultureEdu, "Culture", 3)
                     };
+                    // One category at a time: the bar sweeps up, holds, falls back, then a beat of
+                    // quiet before the next one starts. Glow and ring get the sweep's full length so
+                    // bar, ring and stage light run as a single gesture.
+                    float sweepSeconds = MetricSweepSeconds;
+                    float cycleSeconds = sweepSeconds + MetricGapSeconds;
                     foreach (var (p, groupName, ringQuadrant) in pillars)
                     {
                         StageFocus(groupName);
-                        dashboard.HighlightPillar(p, 1.2f);
-                        dashboard.PlayPillarMaxDemo(p, 1.2f); // bar sweeps to full and back
+                        dashboard.HighlightPillar(p, sweepSeconds);
+                        dashboard.PlayPillarMaxDemo(p, MetricRiseSeconds, MetricHoldSeconds); // bar sweeps to full and back
                         if (hubRegistry != null && hubRegistry.Hubs != null)
                             foreach (var h in hubRegistry.Hubs)
-                                if (h != null) h.PlayRingDemo(ringQuadrant, 1.2f);
-                        yield return new WaitForSeconds(0.85f);
+                                if (h != null) h.PlayRingDemo(ringQuadrant, sweepSeconds);
+                        yield return new WaitForSeconds(cycleSeconds);
                     }
                     // Rest of the step: all four categories hold the stage together.
                     StageFocus("Environment", "Economy", "Safety", "Culture");
-                    float rest = duration - pillars.Length * 0.85f;
+                    float rest = duration - pillars.Length * cycleSeconds;
                     if (rest > 0f) yield return new WaitForSeconds(rest);
                 }
                 else if (action == "qolDemo" && dashboard != null)
@@ -422,8 +425,10 @@ namespace CityTwin.UI
                     // QOL sweeps to max and back while Budget, then Time, blink in turn —
                     // sequential so each readout gets its own beat of attention.
                     StageFocus("Quality Of Life", "Budget", "Timer");
-                    float sweep = Mathf.Min(3f, duration - 0.5f);
-                    dashboard.PlayQolMaxDemo(sweep);
+                    // Keep the whole sweep inside the step, however long the step is configured for.
+                    float rise = Mathf.Min(MetricRiseSeconds, Mathf.Max(0.05f, (duration - 0.5f - MetricHoldSeconds) * 0.5f));
+                    float sweep = DashboardController.DemoSweepSeconds(rise, MetricHoldSeconds);
+                    dashboard.PlayQolMaxDemo(rise, MetricHoldSeconds);
                     dashboard.HighlightPillar(DashboardController.Pillar.Qol, sweep); // glow rides the sweep
                     StartCoroutine(BudgetThenTimerBlink());
                     yield return new WaitForSeconds(duration);
@@ -455,6 +460,58 @@ namespace CityTwin.UI
 
             FinishTutorial();
         }
+
+        /// <summary>Seconds a stat bar takes to fill during a tutorial demo (and the same to fall back).</summary>
+        private float MetricRiseSeconds
+        {
+            get
+            {
+                float v = configLoader?.Config?.Tutorial?.metricRiseSeconds ?? 0f;
+                return v > 0f ? v : DashboardController.DefaultDemoRiseSeconds;
+            }
+        }
+
+        /// <summary>Seconds a stat bar sits at full before falling back.</summary>
+        private float MetricHoldSeconds
+        {
+            get
+            {
+                float v = configLoader?.Config?.Tutorial?.metricHoldSeconds ?? -1f;
+                return v >= 0f ? v : DashboardController.DefaultDemoHoldSeconds;
+            }
+        }
+
+        /// <summary>Quiet beat between two categories in the categoryGlow walk.</summary>
+        private float MetricGapSeconds
+        {
+            get
+            {
+                float v = configLoader?.Config?.Tutorial?.metricGapSeconds ?? -1f;
+                return v >= 0f ? v : 0.5f;
+            }
+        }
+
+        /// <summary>Wall-clock length of one bar sweep: rise, hold at full, fall.</summary>
+        private float MetricSweepSeconds => DashboardController.DemoSweepSeconds(MetricRiseSeconds, MetricHoldSeconds);
+
+        // Popup cadence, also from game_config.json ("tips"), so the on-site rhythm of band tips,
+        // citizen bubbles and idle nudges can be retuned without opening Unity. A missing section
+        // or a non-positive value falls back to the shipped default.
+        private GameConfig.TipsData TipsConfig => configLoader?.Config?.Tips;
+        private static float TipTime(float configured, float fallback) => configured > 0f ? configured : fallback;
+
+        /// <summary>Seconds a score-band pro-tip popup stays on screen.</summary>
+        private float BandPopupSeconds => TipTime(TipsConfig?.bandPopupSeconds ?? 0f, 8f);
+        /// <summary>Seconds between timed citizen reactions once the tutorial is over.</summary>
+        private float ReactionIntervalSeconds => TipTime(TipsConfig?.reactionIntervalSeconds ?? 0f, 18f);
+        /// <summary>Seconds a hub reaction bubble stays up.</summary>
+        private float BubbleSeconds => TipTime(TipsConfig?.bubbleSeconds ?? 0f, 4f);
+        /// <summary>Minimum silence between any two tips.</summary>
+        private float MinTipGapSeconds => TipTime(TipsConfig?.minTipGapSeconds ?? 0f, 18f);
+        /// <summary>Seconds of tip silence before the robot re-shows the current pro-tip.</summary>
+        private float TipReminderSeconds => TipTime(TipsConfig?.tipReminderSeconds ?? 0f, 24f);
+        /// <summary>Extra wait added per consecutive idle reminder.</summary>
+        private float ReminderBackoffSeconds => TipTime(TipsConfig?.reminderBackoffSeconds ?? 0f, 20f);
 
         private void FinishTutorial()
         {
@@ -928,7 +985,7 @@ namespace CityTwin.UI
             _firstSplashDone = false;
             _pillarLastTime.Clear();
             _hubLastTime.Clear();
-            _nextReactionTime = Time.time + reactionIntervalSeconds;
+            _nextReactionTime = Time.time + ReactionIntervalSeconds;
             CaptureTickBaseline();
 
             if (_bandRoutine != null) { StopCoroutine(_bandRoutine); _bandRoutine = null; }
@@ -983,12 +1040,6 @@ namespace CityTwin.UI
             EvaluateBands();
         }
 
-        [Tooltip("Seconds of total tip silence after which the robot gently re-shows the current band's pro-tip (or the place-a-tile nudge before the first placement).")]
-        [SerializeField] private float tipReminderSeconds = 30f;
-        [Tooltip("Each consecutive reminder without a placement in between waits this much longer, so idle nudging never turns into nagging. Resets on placement.")]
-        [SerializeField] private float reminderBackoffSeconds = 20f;
-        [Tooltip("Never show two tips (band, reaction or reminder) closer together than this — stops the early game from firing a tip on every single placement.")]
-        [SerializeField] private float minTipGapSeconds = 25f;
         [Tooltip("Hub indices that never host reaction bubbles (their bubbles would cover menus/dashboard). Layout-specific.")]
         [SerializeField] private int[] bubbleExcludedHubIndices = new int[0];
 
@@ -1013,24 +1064,24 @@ namespace CityTwin.UI
             // so the first bubble lands one full interval after play actually starts.
             if (!IsPlaying)
             {
-                _nextReactionTime = Time.time + reactionIntervalSeconds;
+                _nextReactionTime = Time.time + ReactionIntervalSeconds;
                 _lastTipTime = Time.time;
                 return;
             }
 
             if (Time.time >= _nextReactionTime)
             {
-                _nextReactionTime = Time.time + reactionIntervalSeconds;
+                _nextReactionTime = Time.time + ReactionIntervalSeconds;
                 // Never talk over an active tip, and keep a minimum breath between tips.
-                if (!TipVisualActive && Time.time - _lastTipTime >= minTipGapSeconds)
+                if (!TipVisualActive && Time.time - _lastTipTime >= MinTipGapSeconds)
                     EvaluateTimedReaction();
             }
 
             // Graceful idle fallback: nudge sooner at first, then back off the longer the idle lasts.
-            float reminderWait = tipReminderSeconds + Mathf.Min(_reminderStreak, 3) * reminderBackoffSeconds;
+            float reminderWait = TipReminderSeconds + Mathf.Min(_reminderStreak, 3) * ReminderBackoffSeconds;
             if (!TipVisualActive
                 && Time.time - _lastTipTime > reminderWait
-                && Time.time - _lastPlacementTime > tipReminderSeconds)
+                && Time.time - _lastPlacementTime > TipReminderSeconds)
             {
                 _reminderStreak++;
                 ShowTipReminder();
@@ -1106,7 +1157,7 @@ namespace CityTwin.UI
 
             // Early game crosses a band on nearly every placement — keep a minimum gap so the robot
             // doesn't comment on each tile. A deferred band re-fires on a later placement.
-            if (Time.time - _lastTipTime < minTipGapSeconds) { _highestBandShown--; return; }
+            if (Time.time - _lastTipTime < MinTipGapSeconds) { _highestBandShown--; return; }
 
             DestroyCurrentBubble(); // a band milestone outranks a lingering hub bubble
 
@@ -1177,7 +1228,7 @@ namespace CityTwin.UI
                 }
                 if (show != null) yield return show.WaitForCompletion(true);
 
-                float readSeconds = Mathf.Max(bandPopupSeconds * 0.5f, 2.5f + chunks[i].Length * tipSecondsPerChar);
+                float readSeconds = Mathf.Max(BandPopupSeconds * 0.5f, 2.5f + chunks[i].Length * tipSecondsPerChar);
                 yield return new WaitForSeconds(readSeconds);
 
                 bool last = i == chunks.Count - 1;
@@ -1209,7 +1260,7 @@ namespace CityTwin.UI
                 popup.SetText(text);
                 var show = popup.PlayShowTween();
                 if (show != null) yield return show.WaitForCompletion(true);
-                yield return new WaitForSeconds(bandPopupSeconds);
+                yield return new WaitForSeconds(BandPopupSeconds);
                 var hide = popup.PlayHideTween();
                 if (hide != null) yield return hide.WaitForCompletion(true);
             }
@@ -1601,9 +1652,9 @@ namespace CityTwin.UI
             var inSeq = DOTween.Sequence().SetTarget(rt).SetUpdate(true);
             inSeq.Join(cg.DOFade(1f, 0.28f).SetEase(Ease.OutQuad));
             inSeq.Join(rt.DOScale(1f, 0.28f).SetEase(Ease.OutBack));
-            rt.DOAnchorPos(startPos + new Vector2(0f, bubbleRise), bubbleSeconds).SetEase(Ease.OutCubic).SetUpdate(true).SetTarget(rt);
+            rt.DOAnchorPos(startPos + new Vector2(0f, bubbleRise), BubbleSeconds).SetEase(Ease.OutCubic).SetUpdate(true).SetTarget(rt);
 
-            yield return new WaitForSecondsRealtime(bubbleSeconds);
+            yield return new WaitForSecondsRealtime(BubbleSeconds);
 
             if (rt != null)
             {

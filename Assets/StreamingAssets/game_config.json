@@ -4,7 +4,7 @@
         "defaultLanguage": "EN"
     },
     "session": {
-        "gameplaySeconds": 30,
+        "gameplaySeconds": 270,
         "maxPlayers": 4
     },
     "budget": {
@@ -344,35 +344,46 @@
         "steps": [
             {
                 "textKey": "tutorial.step1",
-                "durationSeconds": 5.0,
+                "durationSeconds": 10.0,
                 "action": "hubSpawn"
             },
             {
                 "textKey": "tutorial.step2",
-                "durationSeconds": 4.0,
+                "durationSeconds": 10.0,
                 "action": "placementGate"
             },
             {
                 "textKey": "tutorial.score",
-                "durationSeconds": 4.0,
+                "durationSeconds": 8.0,
                 "action": "scoreGlow"
             },
             {
                 "textKey": "tutorial.balance",
-                "durationSeconds": 4.0,
+                "durationSeconds": 8.0,
                 "action": "categoryGlow"
             },
             {
                 "textKey": "tutorial.goal",
-                "durationSeconds": 5.0,
+                "durationSeconds": 10.0,
                 "action": "qolDemo"
             },
             {
                 "textKey": "tutorial.go",
-                "durationSeconds": 4.0,
+                "durationSeconds": 5.0,
                 "action": ""
             }
-        ]
+        ],
+        "metricRiseSeconds": 0.9599999785423279,
+        "metricHoldSeconds": 0.30000001192092898,
+        "metricGapSeconds": 0.5
+    },
+    "tips": {
+        "bandPopupSeconds": 8.0,
+        "reactionIntervalSeconds": 18.0,
+        "bubbleSeconds": 4.0,
+        "minTipGapSeconds": 18.0,
+        "tipReminderSeconds": 24.0,
+        "reminderBackoffSeconds": 20.0
     },
     "inactivity": {
         "timeoutSeconds": 30.0,
@@ -416,7 +427,7 @@
       "building.park.name": "PARK",
       "building.recycling_plant.name": "RECYCLING CENTRE",
       "building.office.name": "OFFICE",
-      "building.mall.name": "MALL",
+      "building.mall.name": "SHOPPING MALL",
       "building.factory.name": "FACTORY",
       "building.police_station.name": "POLICE STATION",
       "building.fire_station.name": "FIRE STATION",
@@ -451,7 +462,7 @@
       "end.20_40.body": "You’re getting the hang of it! Your city is starting to grow, and you’re learning how to manage your budget. Some of your residential hubs are looking good! Let’s see if we can make the rest of the city just as bright!\n\nPro-Tip: Check your dashboard to see which bar is the shortest. If the Health & Safety bar is low, try placing a Police Station or Hospital near the residential hubs. Balance is the secret to a happy city!",
       "end.40_60.title": "Fantastic Work!",
       "end.40_60.body": "You’ve built a solid, working city where people have what they need. You’re doing a great job balancing your spending and making sure your residents have parks to play in and offices to work in. You're a real pro!\n\nPro-Tip: To get an even higher score, check your Accessibility metric! Try to place your favorite buildings closer to the transit network so it’s easy for everyone to get to them.",
-      "end.60_80.title": "Simple Amazing!",
+      "end.60_80.title": "Simply Amazing!",
       "end.60_80.body": "Wow! Your city is thriving and your citizens are so happy! You’ve built a beautiful place to live with lots of culture, green spaces, and safe streets. You have a real talent for urban planning!\n\nPro-Tip: You’re so close to a perfect score! Try using the larger impact tiles (like the big recycling center or the state circus). They cost a bit more, but they benefit more people at the same time!",
       "end.80_100.title": "Ultimate City Champion!",
       "end.80_100.body": "Unbelievable! You’ve built the 'Dream City!' Everything is perfectly balanced, and your Quality of Life score is at the very top. You’ve used the Digital Twin system to create a future that is green, safe, and exciting for everyone. You’re a Master Planner!\n\nPro-Tip: You’ve mastered the game! Can you challenge a friend and see if they can match your amazing score?",
@@ -565,7 +576,7 @@
       "end.20_40.title": "Дело пошло!",
       "end.20_40.body": "Ты быстро учишься! Город постепенно растёт, а ты уже уверенно распоряжаешься бюджетом. Жилые кварталы выглядят весьма достойно. Давай постараемся, чтобы и остальные районы стали такими же благоустроенными!\n\nСовет профи: следи за индикаторами — какая шкала самая короткая? Если просел показатель безопасности или здоровья, поставь рядом с домами отдел полиции или больницу. Помни: залог процветания города — в балансе!",
       "end.40_60.title": "Блестящий результат!",
-      "end.40_60.body": "Тебе удалось создать надёжный и живой механизм, где нужды горожан полностью удовлетворены. Ты мастерски распределяешь средства, не забывая ни об игровых площадках, ни о рабочих местах. Сразу видно работу мастера!\n\nСовет профи: хочешь ещё более высокий рейтинг? Обрати внимание на индикатор \"Доступность\". Постарайся перенести важные объекты ближе к дорогам и остановкам — так всем жителям будет легко до них дойти или доехать!",
+      "end.40_60.body": "Тебе удалось создать надёжный и живой механизм, где нужды горожан полностью удовлетворены. Ты мастерски распределяешь средства, не забывая ни об игровых площадках, ни о рабочих местах. Сразу видно работу мастера!\n\nСовет профи: хочешь ещё более высокий рейтинг? Обрати внимание на индикатор «Доступность». Постарайся перенести важные объекты ближе к дорогам и остановкам — так всем жителям будет легко до них дойти или доехать!",
       "end.60_80.title": "Просто невероятно!",
       "end.60_80.body": "Потрясающе! Город расцветает, а жители просто в восторге. У тебя получилось по-настоящему гармоничное пространство! Здесь есть культурные площадки, зелёные зоны и безопасные улицы. В тебе чувствуется явный талант к градостроительству!\n\nСовет профи: до идеального результата осталось совсем чуть-чуть! Используй более масштабные объекты, например, центр по переработке отходов или государственный цирк. Пусть они и стоят дороже, зато принесут пользу сразу всему району!",
       "end.80_100.title": "Чемпион города!",
@@ -726,9 +737,9 @@
       "feedback.low": "Тоқтама! Бюджет шығыны мен өмір сапасы арасында барынша дұрыс үйлесім табуға тырыс!",
       "reaction.positive.environment.v2": "Керемет! Төңірек жап-жасыл! Ауа тап-таза, табиғат жайнап, ауданымызда өмір қайнап тұр!",
       "reaction.positive.economy.v2": "Мұнда жұмыс істеп, дүкен аралайтын жер көп екен. Қаламыздың экономикасы көз алдымызда нығайып келеді!",
-      "reaction.positive.safety.v2": "Мұнда жүргенде зәредей қауіп сезбеймін! Дәрігерлер мен құтқарушылар жақын маңда жүргенін, қажет болса көмекке жетіп келерін білгеннің өзі бір ғанибет!",
-      "reaction.positive.culture.v2": "Мұнда бос уақыт өткізіп, дамимын дегенге қаншама мүмкіндік бар! Осынша мектебі мен мұражайы бар аудан нағыз зияткер аудан саналмай ма!",
-      "reaction.positive.access.v2": "Бір жаққа барам десең, әп-сәтте жетесің! Енді кептелісте тұрып ығырың шықпайтын болды!",
+      "reaction.positive.safety.v2": "Мен зәредей қауіп сезбеймін! Жедел жәрдем не құтқару қызметі керек болса, тез-ақ жетіп келетінін білемін.",
+      "reaction.positive.culture.v2": "Мұнда дамимын деген адамға мүмкіндік көп! Музей, мектептер жеткілікті! Біздің аудан нағыз зияткерлер орталығына айналып келеді!",
+      "reaction.positive.access.v2": "Қалада көлікпен жүрген оп-оңай болып кетті! Кептеліс, ұзақ жол дегенді ұмытқалы қашан!",
       "reaction.negative.environment.v2": "Құрысын, мына жердің ауасы не деген лас! Тынысым тарылып барады! Ағаш егу керек қой!",
       "reaction.negative.economy.v2": "Жұмыс таба алмайсың, бірдеңе сатып алайын десең, алатын жер жоқ! Қаламыздың экономикасы құлдырап барады, оған көмек керек!",
       "reaction.negative.safety.v2": "Үнемі қауіптеніп, қорқып жүремін. Таяу маңда бір де бір аурухана жоқ. Бізге шұғыл көмек керек!",

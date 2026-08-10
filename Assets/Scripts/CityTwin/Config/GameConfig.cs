@@ -20,6 +20,7 @@ namespace CityTwin.Config
         public TooltipsData Tooltips;
         public StopsData Stops;
         public TutorialData Tutorial;
+        public TipsData Tips;
         public InactivityData Inactivity;
         public EndMessageData[] EndMessages;
         public Dictionary<string, Dictionary<string, string>> Localization;
@@ -197,6 +198,12 @@ namespace CityTwin.Config
         public class TutorialData
         {
             public TutorialStepData[] steps;
+            /// <summary>Demo sweep: seconds for a stat bar to fill to full, and the same again to fall back.</summary>
+            public float metricRiseSeconds = 0.96f;
+            /// <summary>Demo sweep: seconds the bar sits at full before falling back.</summary>
+            public float metricHoldSeconds = 0.3f;
+            /// <summary>categoryGlow: quiet beat after a bar settles, before the next category starts.</summary>
+            public float metricGapSeconds = 0.5f;
         }
 
         [Serializable]
@@ -207,6 +214,25 @@ namespace CityTwin.Config
             /// <summary>Optional choreography hook: "placementGate" (ripple hint + wait for first tile),
             /// "scoreGlow" (QOL badge), "categoryGlow" (4 pillars in turn), "qolDemo" (QOL to max + timer glow).</summary>
             public string action;
+        }
+
+        /// <summary>Cadence of the in-game popups: score-band pro-tips, citizen reaction bubbles and
+        /// idle nudges. Text for all three comes from the localization tables; this is only timing.</summary>
+        [Serializable]
+        public class TipsData
+        {
+            /// <summary>Seconds a score-band pro-tip popup stays on screen.</summary>
+            public float bandPopupSeconds = 8f;
+            /// <summary>Seconds between timed citizen reactions once the tutorial is over.</summary>
+            public float reactionIntervalSeconds = 18f;
+            /// <summary>Seconds a hub reaction bubble stays up.</summary>
+            public float bubbleSeconds = 4f;
+            /// <summary>Minimum silence between any two tips (band, reaction or reminder).</summary>
+            public float minTipGapSeconds = 18f;
+            /// <summary>Seconds of total tip silence before the robot re-shows the current pro-tip.</summary>
+            public float tipReminderSeconds = 24f;
+            /// <summary>Each consecutive reminder without a placement waits this much longer.</summary>
+            public float reminderBackoffSeconds = 20f;
         }
 
         [Serializable]

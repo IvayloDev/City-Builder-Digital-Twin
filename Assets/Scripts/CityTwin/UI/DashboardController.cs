@@ -349,15 +349,24 @@ public class DashboardController : MonoBehaviour
 
     /// <summary>Tutorial demo: sweep the QOL badge to 99 and back, then hand display back to the live
     /// value. 99 not 100 — the badge layout breaks with three digits at full fill.</summary>
-    public void PlayQolMaxDemo(float seconds = 3f)
+    public void PlayQolMaxDemo(float riseSeconds = DefaultDemoRiseSeconds, float holdSeconds = DefaultDemoHoldSeconds)
     {
         if (_qolDemoRoutine != null) StopCoroutine(_qolDemoRoutine);
-        _qolDemoRoutine = StartCoroutine(QolDemoRoutine(Mathf.Max(1f, seconds)));
+        _qolDemoRoutine = StartCoroutine(QolDemoRoutine(Mathf.Max(0.05f, riseSeconds), Mathf.Max(0f, holdSeconds)));
     }
 
     private Coroutine _qolDemoRoutine;
     private bool _qolDemoActive;
     private float _qolDemoValue;
+
+    // Demo sweep shape. Rise and fall each take riseSeconds; the bar then sits at full for
+    // holdSeconds before falling back. Callers pass values from config; these are the fallbacks
+    // used when no config is loaded.
+    public const float DefaultDemoRiseSeconds = 0.96f;
+    public const float DefaultDemoHoldSeconds = 0.3f;
+
+    /// <summary>Wall-clock length of a demo sweep, for callers pacing a sequence around it.</summary>
+    public static float DemoSweepSeconds(float riseSeconds, float holdSeconds) => riseSeconds * 2f + holdSeconds;
 
     // Per-pillar demo sweeps (tutorial): bar animates to full and back, then live values resume.
     private readonly bool[] _pillarDemo = new bool[4];
@@ -365,20 +374,20 @@ public class DashboardController : MonoBehaviour
     private readonly Coroutine[] _pillarDemoRoutines = new Coroutine[4];
 
     /// <summary>Tutorial demo: sweep one category bar to full and back (Qol routes to the badge demo).</summary>
-    public void PlayPillarMaxDemo(Pillar pillar, float seconds = 1.2f)
+    public void PlayPillarMaxDemo(Pillar pillar, float riseSeconds = DefaultDemoRiseSeconds, float holdSeconds = DefaultDemoHoldSeconds)
     {
-        if (pillar == Pillar.Qol) { PlayQolMaxDemo(seconds); return; }
+        if (pillar == Pillar.Qol) { PlayQolMaxDemo(riseSeconds, holdSeconds); return; }
         int idx = (int)pillar;
         if (idx < 0 || idx > 3) return;
         if (_pillarDemoRoutines[idx] != null) StopCoroutine(_pillarDemoRoutines[idx]);
-        _pillarDemoRoutines[idx] = StartCoroutine(PillarDemoRoutine(idx, Mathf.Max(0.4f, seconds)));
+        _pillarDemoRoutines[idx] = StartCoroutine(PillarDemoRoutine(idx, Mathf.Max(0.05f, riseSeconds), Mathf.Max(0f, holdSeconds)));
     }
 
-    private System.Collections.IEnumerator PillarDemoRoutine(int idx, float seconds)
+    private System.Collections.IEnumerator PillarDemoRoutine(int idx, float riseSeconds, float holdSeconds)
     {
         _pillarDemo[idx] = true;
         float baseVal = idx switch { 0 => _displayEnv, 1 => _displayEco, 2 => _displaySaf, _ => _displayCul };
-        float up = seconds * 0.4f, hold = seconds * 0.2f, down = seconds * 0.4f;
+        float up = riseSeconds, hold = holdSeconds, down = riseSeconds;
         for (float t = 0f; t < up; t += Time.deltaTime)
         {
             _pillarDemoValue[idx] = Mathf.Lerp(baseVal, 99f, Mathf.SmoothStep(0f, 1f, t / up));
@@ -395,11 +404,11 @@ public class DashboardController : MonoBehaviour
         _pillarDemoRoutines[idx] = null;
     }
 
-    private System.Collections.IEnumerator QolDemoRoutine(float seconds)
+    private System.Collections.IEnumerator QolDemoRoutine(float riseSeconds, float holdSeconds)
     {
         _qolDemoActive = true;
         float baseVal = _displayQol;
-        float up = seconds * 0.4f, hold = seconds * 0.2f, down = seconds * 0.4f;
+        float up = riseSeconds, hold = holdSeconds, down = riseSeconds;
         for (float t = 0f; t < up; t += Time.deltaTime)
         {
             _qolDemoValue = Mathf.Lerp(baseVal, 99f, Mathf.SmoothStep(0f, 1f, t / up));

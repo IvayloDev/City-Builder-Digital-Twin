@@ -140,6 +140,7 @@ namespace CityTwin.Config
                 config.Tooltips = root.tooltips ?? new GameConfig.TooltipsData();
                 config.Stops = root.stops ?? new GameConfig.StopsData();
                 config.Tutorial = root.tutorial ?? new GameConfig.TutorialData();
+                config.Tips = root.tips ?? new GameConfig.TipsData();
                 config.Inactivity = root.inactivity ?? new GameConfig.InactivityData();
                 config.EndMessages = root.endMessages ?? Array.Empty<GameConfig.EndMessageData>();
 
@@ -397,6 +398,7 @@ namespace CityTwin.Config
                 tooltips = c.Tooltips,
                 stops = c.Stops,
                 tutorial = c.Tutorial,
+                tips = c.Tips,
                 inactivity = c.Inactivity,
                 endMessages = c.EndMessages
             };
@@ -494,6 +496,7 @@ namespace CityTwin.Config
                 Tooltips = new GameConfig.TooltipsData { introKeys = Array.Empty<string>() },
                 Stops = new GameConfig.StopsData(),
                 Tutorial = new GameConfig.TutorialData(),
+                Tips = new GameConfig.TipsData(),
                 Inactivity = new GameConfig.InactivityData(),
                 EndMessages = Array.Empty<GameConfig.EndMessageData>(),
                 Localization = new Dictionary<string, Dictionary<string, string>>(StringComparer.OrdinalIgnoreCase)

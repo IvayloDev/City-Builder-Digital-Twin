@@ -93,6 +93,17 @@ namespace CityTwin.UI
             if (!_active) return;
             if (sessionTimer != null && sessionTimer.CurrentPhase == SessionTimer.Phase.End) return;
 
+            // The tutorial holds the session clock paused. Nobody is idle while the robot is still
+            // talking, and the table is frozen between the gate tile and the handover, so the idle
+            // timer would run out on its own: the popup would nag mid-tutorial, and idleEndSeconds
+            // would zero a clock that hasn't started — surfacing as a 00:00 readout and an end
+            // screen the instant the tutorial hands over. Idle time only counts once play begins.
+            if (sessionTimer != null && sessionTimer.IsPaused)
+            {
+                ResetTimer();
+                return;
+            }
+
             _idleTimer += Time.deltaTime;
 
             if (!_popupVisible && _idleTimer >= _timeoutSeconds)
