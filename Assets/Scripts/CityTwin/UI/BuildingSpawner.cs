@@ -353,6 +353,36 @@ namespace CityTwin.UI
                 Canvas.ForceUpdateCanvases();
         }
 
+        /// <summary>
+        /// A marker that only shows a tile lying on the table: the Editor's stand-in for a physical tile the game isn't
+        /// counting yet (it picked a language, or the table is locked). Same look, scale and placement as a building
+        /// marker, but not registered, so nothing scores, connects or ripples from it. Move it with <see cref="PlaceStandIn"/>.
+        /// </summary>
+        public RectTransform CreateStandIn(string buildingId, Vector2 tuioPos)
+        {
+            if (buildingMarkerPrefab == null || contentRoot == null) return null;
+            CapturePrefabScale();
+            GameObject instance = Instantiate(buildingMarkerPrefab, contentRoot);
+            instance.name = "SimTile_" + buildingId;
+            instance.transform.localScale = _prefabBaseScale * _tileScale;
+            var display = instance.GetComponentInChildren<BuildingMarkerDisplay>(true);
+            if (display != null) display.SetBuilding(buildingId);
+            // A tile lies on top of the projection: draw above the game overlays (start screen, top bar).
+            var canvas = instance.GetComponent<Canvas>();
+            if (canvas == null) canvas = instance.AddComponent<Canvas>();
+            canvas.overrideSorting = true;
+            canvas.sortingOrder = BuildingPalette.SimulatedTileSortingOrder;
+            var rt = instance.transform as RectTransform;
+            PlaceStandIn(rt, tuioPos);
+            return rt;
+        }
+
+        /// <summary>Move a stand-in marker to a TUIO position, placed exactly like a building marker would be.</summary>
+        public void PlaceStandIn(RectTransform marker, Vector2 tuioPos)
+        {
+            if (marker != null) marker.anchoredPosition = TuioToLocalPosition(tuioPos) + markerPositionOffset;
+        }
+
         public bool TryGetPreviewSprite(string buildingId, out Sprite sprite)
         {
             sprite = null;

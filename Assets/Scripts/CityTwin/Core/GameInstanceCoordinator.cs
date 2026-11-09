@@ -183,6 +183,9 @@ namespace CityTwin.Core
             }
         }
 
+        /// <summary>While the start screen is up: a tile at this pose picks the language it sits on. Returns true if one was picked.</summary>
+        public bool TryPickLanguage(TilePose pose) => startScreen != null && startScreen.TryPickLanguage(pose);
+
         /// <summary>
         /// Process a tile update through the same path used by OSC/TUIO.
         /// Returns true only when the tile is tracked by the coordinator after processing
@@ -193,6 +196,10 @@ namespace CityTwin.Core
             engineTileId = null;
             if (string.IsNullOrEmpty(pose.TileId))
                 return false;
+
+            // Physical tiles reach the start screen through TileTrackingManager; tiles placed here (mouse
+            // tester, palette) must pick a language the same way.
+            startScreen?.TryPickLanguage(pose);
 
             OnTileUpdated(pose);
             return _oscToEngineTileId.TryGetValue(pose.TileId, out engineTileId);

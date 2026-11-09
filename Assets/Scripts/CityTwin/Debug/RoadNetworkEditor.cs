@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using UnityEngine;
 using UnityEngine.InputSystem;
+using CityTwin.Calibration;
 using CityTwin.Core;
 using CityTwin.UI;
 
@@ -287,9 +288,10 @@ public class RoadNetworkEditor : MonoBehaviour
         var mouse = Mouse.current;
         if (mouse == null) return;
 
-        Vector2 screen = mouse.position.ReadValue();
+        Vector2 screen = mouse.position.ReadValue(); // window pixels: the IMGUI panel
+        Vector2 tableScreen = ProjectedPointer.ToTable(screen); // table-camera pixels: undoes the projector warp
         bool hasContent = RectTransformUtility.ScreenPointToWorldPointInRectangle(
-            buildingSpawner.ContentRoot, screen, uiCamera, out Vector3 world);
+            buildingSpawner.ContentRoot, tableScreen, uiCamera, out Vector3 world);
         Vector2 mouseContent = hasContent ? buildingSpawner.WorldToContentLocal(world) : Vector2.zero;
 
         bool leftDown = mouse.leftButton.wasPressedThisFrame;
@@ -675,7 +677,8 @@ public class RoadNetworkEditor : MonoBehaviour
 
     private Vector2 WorldToGui(Vector3 world)
     {
-        Vector2 screen = RectTransformUtility.WorldToScreenPoint(uiCamera, world);
+        // Table-camera pixels -> window pixels of the (possibly warped) projector output.
+        Vector2 screen = ProjectedPointer.FromTable(RectTransformUtility.WorldToScreenPoint(uiCamera, world));
         return new Vector2(screen.x, Screen.height - screen.y);
     }
 

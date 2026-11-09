@@ -11,13 +11,15 @@ namespace CityTwin.UI
     /// </summary>
     public class StartScreenIntroAnimator : MonoBehaviour
     {
+        // Kept short on purpose: visitors put a tile on a language as soon as the game is up, so the
+        // buttons must be visible within about a second (a tile already picks a language before that).
         [Tooltip("Silence after load before the logo appears.")]
-        [SerializeField] private float startDelay = 2f;
+        [SerializeField] private float startDelay = 0f;
         [Tooltip("Extra pause between the logo landing and the first language button.")]
-        [SerializeField] private float logoToButtonsDelay = 1f;
+        [SerializeField] private float logoToButtonsDelay = 0f;
         [Tooltip("Gap between consecutive language buttons popping in.")]
-        [SerializeField] private float stagger = 0.5f;
-        [SerializeField] private float fadeDuration = 1f;
+        [SerializeField] private float stagger = 0.1f;
+        [SerializeField] private float fadeDuration = 0.4f;
         [SerializeField] private float popScaleFrom = 0.88f;
         [Tooltip("Child that gets the slow idle float after entering (usually the logo art). Auto: first child.")]
         [SerializeField] private RectTransform floatTarget;

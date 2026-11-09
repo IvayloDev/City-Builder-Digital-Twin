@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.UI;
+using CityTwin.Calibration;
 using CityTwin.Core;
 using CityTwin.Config;
 using CityTwin.Localization;
@@ -64,6 +65,8 @@ public class MouseBuildingTester : MonoBehaviour
         public string EngineId;
         public RectTransform Marker;
         public string BuildingId;
+        /// <summary>Simulated physical tile the game isn't counting yet: Marker is our own stand-in, EngineId is empty.</summary>
+        public bool StandIn;
     }
 
     private readonly List<ActiveTile> _tiles = new List<ActiveTile>();
@@ -104,6 +107,8 @@ public class MouseBuildingTester : MonoBehaviour
     private string _lastSaveMessage;
     private bool _lastSaveOk = true;
     private bool _awaitingImport;
+    private ProjectionOutputRig _projectionRig;
+    private string _tableSetupMessage;
 
     private void Awake()
     {
@@ -150,6 +155,30 @@ public class MouseBuildingTester : MonoBehaviour
         });
     }
 
+    /// <summary>
+    /// Simulate a physical tile left on the table that the game isn't counting (it picked a language, or the table
+    /// is locked by the start screen / tutorial): show a stand-in marker there and track it like any tile, so it can
+    /// be dragged, deleted or dropped on the clear zone. Once moving it counts, it turns into the real building.
+    /// </summary>
+    public void RegisterStandInTile(string debugTileId, string buildingId, Vector2 tuioPos)
+    {
+        if (buildingSpawner == null || string.IsNullOrEmpty(debugTileId)) return;
+        var marker = buildingSpawner.CreateStandIn(buildingId, tuioPos);
+        if (marker == null) return;
+        _tiles.Add(new ActiveTile { DebugTileId = debugTileId, Marker = marker, BuildingId = buildingId, StandIn = true });
+    }
+
+    // The coordinator started counting a stand-in tile: swap our marker for the building marker it spawned.
+    private void PromoteStandIn(ActiveTile tile, string engineId)
+    {
+        var real = FindMarkerRecursive($"{tile.BuildingId}_{engineId}");
+        if (real == null) return; // not spawned yet; keep the stand-in
+        if (tile.Marker != null) Object.Destroy(tile.Marker.gameObject);
+        tile.Marker = real;
+        tile.EngineId = engineId;
+        tile.StandIn = false;
+    }
+
     private void Update()
     {
         // Drain a pending config import (async on WebGL: user is picking a file).
@@ -182,6 +211,13 @@ public class MouseBuildingTester : MonoBehaviour
         if (_pickerOpen && pauseInputWhilePickerOpen)
             return;
 
+        // F9 calibration owns the mouse and keyboard: nothing may reach the game until it closes.
+        if (ProjectionCalibrationController.AnyOpen)
+        {
+            _dragging = null;
+            return;
+        }
+
         // Road editor owns the mouse while it's active — no tile spawning/dragging.
         if (roadEditor != null && roadEditor.EditModeActive)
             return;
@@ -192,7 +228,8 @@ public class MouseBuildingTester : MonoBehaviour
         if (keyboard.digit3Key.wasPressedThisFrame) _currentBuildingId = key3BuildingId;
         if (keyboard.digit4Key.wasPressedThisFrame) _currentBuildingId = key4BuildingId;
 
-        Vector2 screenPos = mouse.position.ReadValue();
+        // In table-camera pixels: undoes the projector warp while the projection rig is on.
+        Vector2 screenPos = ProjectedPointer.MousePosition;
 
         if (mouse.leftButton.wasPressedThisFrame)
             OnMouseDown(screenPos);
@@ -306,7 +343,16 @@ public class MouseBuildingTester : MonoBehaviour
             var debugPose = new TilePose(tuioPos, 0f, _currentBuildingId, 0, debugTileId);
             bool placed = coordinator.TryProcessTileUpdate(debugPose, out engineId);
             if (!placed || string.IsNullOrEmpty(engineId))
+            {
+                // Not counted (picked a language, table locked, ...): like a physical tile, it stays on the table.
+                RegisterStandInTile(debugTileId, _currentBuildingId, tuioPos);
+                if (_tiles.Count > 0 && _tiles[_tiles.Count - 1].DebugTileId == debugTileId)
+                {
+                    _dragging = _tiles[_tiles.Count - 1];
+                    _dragOffset = Vector2.zero;
+                }
                 return;
+            }
         }
         else
         {
@@ -430,7 +476,12 @@ public class MouseBuildingTester : MonoBehaviour
         {
             Vector2 tuioPos = buildingSpawner.LocalToTuioPosition(targetLocal);
             var debugPose = new TilePose(tuioPos, 0f, _dragging.BuildingId, 0, _dragging.DebugTileId);
-            coordinator.TryProcessTileUpdate(debugPose, out _);
+            coordinator.TryProcessTileUpdate(debugPose, out string engineId);
+            if (_dragging.StandIn)
+            {
+                if (!string.IsNullOrEmpty(engineId)) PromoteStandIn(_dragging, engineId);
+                else buildingSpawner.PlaceStandIn(_dragging.Marker, tuioPos); // still not counted: move our marker
+            }
         }
         else
         {
@@ -531,6 +582,8 @@ public class MouseBuildingTester : MonoBehaviour
                 roadEditor.ToggleEditMode();
                 _pickerOpen = false; // hand the screen over to the road editor handles
             }
+
+            DrawTableSetupRow();
 
             _expertMode = GUILayout.Toggle(_expertMode,
                 _expertMode ? " Expert mode — showing everything" : " Expert mode — off (client basics only)",
@@ -994,6 +1047,47 @@ public class MouseBuildingTester : MonoBehaviour
     }
 
     private Vector2 _slidersScroll;
+
+    /// <summary>
+    /// Projector setup switch (1 screen / 1 play area vs 2 screens / 4 play areas). Top level in both menu modes:
+    /// it describes the hardware in the room, not game balance. Each setup keeps its own projector calibration.
+    /// </summary>
+    private void DrawTableSetupRow()
+    {
+        if (_projectionRig == null) _projectionRig = FindFirstObjectByType<ProjectionOutputRig>();
+        if (_projectionRig == null || !_projectionRig.isActiveAndEnabled) return;
+
+        GUILayout.BeginVertical(GUI.skin.box);
+        var titleStyle = new GUIStyle(GUI.skin.label) { fontStyle = FontStyle.Bold, fontSize = 12 };
+        titleStyle.normal.textColor = new Color(0.3f, 0.85f, 1f);
+        GUILayout.Label("Table setup", titleStyle);
+        GUILayout.BeginHorizontal();
+        foreach (var setup in TableSetups.All)
+        {
+            bool active = setup == _projectionRig.ActiveSetup;
+            if (GUILayout.Toggle(active, (active ? "● " : "") + setup.DisplayName, GUI.skin.button, GUILayout.Height(26f)) && !active)
+                SwitchTableSetup(setup);
+        }
+        GUILayout.EndHorizontal();
+        var noteStyle = new GUIStyle(GUI.skin.label) { wordWrap = true, fontSize = 10 };
+        noteStyle.normal.textColor = new Color(0.7f, 0.7f, 0.7f);
+        if (_showDetails) GUILayout.Label(_projectionRig.ActiveSetup.Description + " Switching restarts the game. Each setup keeps its own projector and camera calibration (F9).", noteStyle);
+        if (!string.IsNullOrEmpty(_tableSetupMessage)) GUILayout.Label(_tableSetupMessage, noteStyle);
+        GUILayout.EndVertical();
+    }
+
+    private void SwitchTableSetup(TableSetup setup)
+    {
+        if (_projectionRig == null) _projectionRig = FindFirstObjectByType<ProjectionOutputRig>();
+        if (_projectionRig == null) return;
+        var calibration = _projectionRig.GetComponent<ProjectionCalibrationController>();
+        if (calibration != null && calibration.HasUnsavedChanges)
+        {
+            _tableSetupMessage = "Calibration (F9) has unsaved changes: save or discard them first.";
+            return;
+        }
+        _projectionRig.SwitchSetup(setup); // reloads the scene, menu included
+    }
 
     private void DrawSaveRow()
     {

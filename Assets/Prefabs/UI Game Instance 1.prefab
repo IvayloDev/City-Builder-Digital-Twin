@@ -1959,7 +1959,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0.5, y: 0.5}
   m_AnchorMax: {x: 0.5, y: 0.5}
-  m_AnchoredPosition: {x: 486.75, y: -168.49}
+  m_AnchoredPosition: {x: 486.75, y: -208.49}
   m_SizeDelta: {x: 726.5, y: 476.98}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &3560257206740012642
@@ -5477,6 +5477,7 @@ MonoBehaviour:
   - {fileID: 5038858879967740940}
   mapGraphic: {fileID: 4468903338420054050}
   completionFadeSeconds: 0.8
+  messageDelaySeconds: 1
   completionRoadDim: 0.4
   freezeBodyToFirstParagraph: 1
   cycleBodyParagraphs: 1
@@ -5484,7 +5485,6 @@ MonoBehaviour:
   bodyFadeSeconds: 0.35
   balanceBodyText: {fileID: 2867156888965623906}
   strategicBodyText: {fileID: 296105313359367944}
-  budgetBodyText: {fileID: 7588132722624026638}
 --- !u!223 &8755527795431577410
 Canvas:
   m_ObjectHideFlags: 0
@@ -10019,7 +10019,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.Image
   m_Material: {fileID: 0}
   m_Color: {r: 1, g: 1, b: 1, a: 1}
-  m_RaycastTarget: 1
+  m_RaycastTarget: 0
   m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
   m_Maskable: 1
   m_OnCullStateChanged:
@@ -10269,7 +10269,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.Image
   m_Material: {fileID: 0}
   m_Color: {r: 0.4433962, g: 0.4433962, b: 0.4433962, a: 1}
-  m_RaycastTarget: 1
+  m_RaycastTarget: 0
   m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
   m_Maskable: 1
   m_OnCullStateChanged:
@@ -10337,10 +10337,10 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: e82a2d4740ef1454fb019ed1d5a0e398, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::CityTwin.UI.StartScreenIntroAnimator
-  startDelay: 2
-  logoToButtonsDelay: 1
-  stagger: 0.5
-  fadeDuration: 1
+  startDelay: 0
+  logoToButtonsDelay: 0
+  stagger: 0.1
+  fadeDuration: 0.4
   popScaleFrom: 0.88
   floatTarget: {fileID: 0}
   floatAmplitude: 8
@@ -11859,11 +11859,8 @@ MonoBehaviour:
   rippleHintRadius: 30
   rippleHintSpeed: 2.5
   bandPopup: {fileID: 0}
-  bandPopupSeconds: 8
   reactionPopup: {fileID: 7245448217143552200}
-  reactionPopupSeconds: 4
   useHubBubbles: 1
-  bubbleSeconds: 4
   bubbleMaxWidth: 280
   bubbleFontSize: 26
   bubblePadding: 24
@@ -11876,7 +11873,6 @@ MonoBehaviour:
   lowLevel: 30
   highLevel: 70
   minDeltaToReact: 1
-  reactionIntervalSeconds: 18
   perPillarCooldown: 60
   hubRepeatCooldown: 50
   balancedSpreadMax: 15
@@ -11900,9 +11896,6 @@ MonoBehaviour:
   unfocusedGroupAlpha: 0.15
   stageFadeSeconds: 0.5
   tutorialMapGraphic: {fileID: 0}
-  tipReminderSeconds: 24
-  reminderBackoffSeconds: 20
-  minTipGapSeconds: 18
   bubbleExcludedHubIndices: 0000000001000000
   tipChunkMaxChars: 170
   tipSecondsPerChar: 0.045
@@ -13369,6 +13362,10 @@ PrefabInstance:
     - target: {fileID: -2304375700400688866, guid: a061199386a9742f2a5b1f6901d94e58, type: 3}
       propertyPath: m_Enabled
       value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: -2304375700400688866, guid: a061199386a9742f2a5b1f6901d94e58, type: 3}
+      propertyPath: m_RaycastTarget
+      value: 0
       objectReference: {fileID: 0}
     - target: {fileID: 5567868813287497981, guid: a061199386a9742f2a5b1f6901d94e58, type: 3}
       propertyPath: m_Name

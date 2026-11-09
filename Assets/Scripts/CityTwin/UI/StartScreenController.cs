@@ -83,18 +83,27 @@ namespace CityTwin.UI
             if (clickKZ != null) clickKZ.onClick.RemoveAllListeners();
         }
 
-        private void OnTileUpdated(TilePose pose)
+        private void OnTileUpdated(TilePose pose) => TryPickLanguage(pose);
+
+        /// <summary>
+        /// A tile at <paramref name="pose"/> (TUIO-normalized position) picks the language whose button it sits on.
+        /// Works from the first frame, even while the buttons are still fading in. Also called by the coordinator
+        /// for tiles placed in the Editor (mouse tester, palette), so they behave like physical tiles.
+        /// Returns true if a language was picked.
+        /// </summary>
+        public bool TryPickLanguage(TilePose pose)
         {
-            if (_started) return;
-            if (overlayRoot == null || !overlayRoot.activeInHierarchy) return;
-            if (tableRoot == null) return;
+            if (_started) return false;
+            if (overlayRoot == null || !overlayRoot.activeInHierarchy) return false;
+            if (tableRoot == null) return false;
 
             // Convert incoming OSC/TUIO to table local space for hit testing over the language buttons.
             Vector2 tableLocal = OscToTableLocal(pose.Position);
 
-            if (IsPointInside(buttonEN, tableLocal)) { StartWithLanguage("EN"); return; }
-            if (IsPointInside(buttonRU, tableLocal)) { StartWithLanguage("RU"); return; }
-            if (IsPointInside(buttonKZ, tableLocal)) { StartWithLanguage("KZ"); return; }
+            if (IsPointInside(buttonEN, tableLocal)) { StartWithLanguage("EN"); return true; }
+            if (IsPointInside(buttonRU, tableLocal)) { StartWithLanguage("RU"); return true; }
+            if (IsPointInside(buttonKZ, tableLocal)) { StartWithLanguage("KZ"); return true; }
+            return false;
         }
 
         private Vector2 OscToTableLocal(Vector2 oscPos)

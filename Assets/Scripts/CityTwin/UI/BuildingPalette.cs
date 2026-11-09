@@ -74,6 +74,23 @@ namespace CityTwin.UI
             if (configLoader == null && coordinator != null) configLoader = coordinator.GetComponent<GameConfigLoader>();
             if (mouseTester == null) mouseTester = searchRoot.GetComponentInChildren<MouseBuildingTester>(true);
             _canvas = GetComponentInParent<Canvas>();
+            RaiseAboveGameUi();
+        }
+
+        /// <summary>
+        /// Sorting order for simulated physical tiles (this tray, the drag ghost, tiles left on the table): above every
+        /// game overlay (top bar 2, start screen 3, end screen 4), the way a real tile lies on top of the projection.
+        /// </summary>
+        public const int SimulatedTileSortingOrder = 10;
+
+        // Own canvas so the tray and ghost draw above the game overlays; its own raycaster keeps the pins grabbable.
+        private void RaiseAboveGameUi()
+        {
+            if (GetComponent<Canvas>() != null) return;
+            var canvas = gameObject.AddComponent<Canvas>();
+            canvas.overrideSorting = true;
+            canvas.sortingOrder = SimulatedTileSortingOrder;
+            gameObject.AddComponent<GraphicRaycaster>();
         }
 
         private void Update()
@@ -323,10 +340,6 @@ namespace CityTwin.UI
 
             Camera cam = EventCamera(eventData);
 
-            // Dropped outside the blue fan → discard silently.
-            if (tableBounds != null && !tableBounds.ContainsScreenPoint(eventData.position, cam))
-                return;
-
             RectTransform root = buildingSpawner.ContentRoot;
             if (!RectTransformUtility.ScreenPointToWorldPointInRectangle(root, eventData.position, cam, out Vector3 world))
                 return;
@@ -336,8 +349,20 @@ namespace CityTwin.UI
             string tileId = "palette_" + GetInstanceID() + "_" + _nextTileId++;
             var pose = new TilePose(tuio, 0f, def.Id, 0, tileId);
 
+            // Start screen: a pin dropped on a language picks it, like a physical tile (checked before the fan
+            // bounds in case a button sits outside them).
+            bool pickedLanguage = coordinator.TryPickLanguage(pose);
+
+            // Dropped outside the blue fan → discard silently.
+            if (!pickedLanguage && tableBounds != null && !tableBounds.ContainsScreenPoint(eventData.position, cam))
+                return;
+
             if (!coordinator.TryProcessTileUpdate(pose, out string engineId) || string.IsNullOrEmpty(engineId))
-                return; // rejected (budget, overlap, ...)
+            {
+                // Not counted (language pick, table locked, ...): like a physical tile, it stays lying on the table.
+                if (mouseTester != null) mouseTester.RegisterStandInTile(tileId, def.Id, tuio);
+                return;
+            }
 
             // Hand the placed building to MouseBuildingTester so it can be dragged/discarded.
             if (mouseTester != null)

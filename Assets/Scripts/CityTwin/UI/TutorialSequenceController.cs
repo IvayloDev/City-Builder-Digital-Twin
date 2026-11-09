@@ -120,7 +120,7 @@ namespace CityTwin.UI
         [SerializeField] private GameObject skipButton;
         [Tooltip("UI hidden on the start screen (building palette pins etc.) and slowly faded in when the round begins.")]
         [SerializeField] private CanvasGroup[] revealOnGameStart;
-        [Tooltip("Keep the palette pins visible (but inert) on the start screen instead of hiding them until the round begins.")]
+        [Tooltip("Keep the palette pins visible and draggable on the start screen (drop one on a language to pick it) instead of hiding them until the round begins.")]
         [SerializeField] private bool showPinsOnStartScreen = true;
         [SerializeField] private float revealFadeSeconds = 1.4f;
         [SerializeField] private float revealFadeDelay = 0.8f;
@@ -277,7 +277,8 @@ namespace CityTwin.UI
         }
 
         /// <summary>Hide the game-start UI (palette pins, skip) — called while the start screen owns
-        /// the stage. With showPinsOnStartScreen the pins stay visible but inert instead.</summary>
+        /// the stage. With showPinsOnStartScreen the pins stay visible and draggable, so a pin can be
+        /// pulled straight onto a language button (the table itself stays locked until the round).</summary>
         private void HideGameStartUi()
         {
             if (revealOnGameStart != null)
@@ -287,7 +288,7 @@ namespace CityTwin.UI
                     if (cg == null) continue;
                     DOTween.Kill(cg);
                     cg.alpha = showPinsOnStartScreen ? 1f : 0f;
-                    cg.blocksRaycasts = false;
+                    cg.blocksRaycasts = showPinsOnStartScreen;
                 }
             }
         }
