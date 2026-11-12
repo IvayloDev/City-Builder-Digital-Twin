@@ -22,7 +22,7 @@ namespace CityTwin.Calibration
         [Tooltip("Where this projector's frame sits inside the display/window, normalized (like Camera.rect).")]
         public Rect viewport = new Rect(0f, 0f, 1f, 1f);
         [Tooltip("Native shape of this projector's image (width / height). The frame is letterboxed to it inside the viewport, so a preview window of another shape never squashes the picture. 0 = fill the viewport.")]
-        public float aspect = 16f / 9f;
+        public float aspect = 16f / 10f;
 
         [Header("Geometry")]
         [Tooltip("Control points on the table (table uv). Paired by index with Projector Points; 4 = exact corner pin, more = least-squares.")]
@@ -86,22 +86,16 @@ namespace CityTwin.Calibration
         public static readonly Vector2 PlayArea1Center = new Vector2(0.5f, 0.2025f);
 
         /// <summary>
-        /// Where the pilot frame is centred: 0.04 table uv below the zone's centre, so the zone sits higher on screen and
-        /// the palette pins in the bottom corners are fully in frame instead of empty black above the zone.
-        /// </summary>
-        public static readonly Vector2 PilotFrameCenter = new Vector2(0.5f, 0.1625f);
-
-        /// <summary>
-        /// Placeholder layout for the pilot ("1 screen, 1 play area"): one projector on play area 1, the bottom game,
-        /// like DemoScene's single-zone view. The frame is a 16:9 window onto the table, 0.76 table uv (2.3 m) wide,
-        /// holding the whole wedge plus its palette pins; the black around the wedge is the game's own mask. No seam.
-        /// Calibration on site replaces the points (the corner pin also absorbs another aspect).
+        /// Layout for the pilot ("1 screen, 1 play area"): one projector showing exactly what a flat window of the
+        /// projector's shape shows with the rig off. With one projector the rig scales the canvas so the square table
+        /// image is as wide as that flat view (<see cref="ProjectionOutputRig.UsesFlatView"/>), so the frame is the full
+        /// width of the table image, centred, 16:10 tall. No seam. Calibration on site replaces the points.
         /// </summary>
         public static List<ProjectorCalibration> DefaultSingleProjectorLayout()
         {
-            const float width = 0.76f, height = width * 9f / 16f;
-            float left = PilotFrameCenter.x - width * 0.5f, right = PilotFrameCenter.x + width * 0.5f;
-            float bottom = PilotFrameCenter.y - height * 0.5f, top = PilotFrameCenter.y + height * 0.5f;
+            float aspect = new ProjectorCalibration().aspect;
+            float left = 0f, right = 1f;
+            float bottom = 0.5f - 0.5f / aspect, top = 0.5f + 0.5f / aspect;
             return new List<ProjectorCalibration>
             {
                 new ProjectorCalibration

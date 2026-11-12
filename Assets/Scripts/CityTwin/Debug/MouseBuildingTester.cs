@@ -230,6 +230,7 @@ public class MouseBuildingTester : MonoBehaviour
 
         // In table-camera pixels: undoes the projector warp while the projection rig is on.
         Vector2 screenPos = ProjectedPointer.MousePosition;
+        if (!float.IsFinite(screenPos.x) || !float.IsFinite(screenPos.y)) return; // pointer not mappable this frame
 
         if (mouse.leftButton.wasPressedThisFrame)
             OnMouseDown(screenPos);

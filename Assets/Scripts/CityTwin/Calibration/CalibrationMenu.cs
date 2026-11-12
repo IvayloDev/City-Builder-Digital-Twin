@@ -150,6 +150,14 @@ namespace CityTwin.Calibration
             var previousMatrix = GUI.matrix;
             GUI.matrix = Matrix4x4.Scale(new Vector3(scale, scale, 1f));
 
+            // The menu is drawn on the projected image: during a camera capture keep it to one small bar.
+            if (!_controller.SetupTabOpen && _controller.CameraTabOpen && _sensors.IsCapturing)
+            {
+                DrawCompactCapture();
+                GUI.matrix = previousMatrix;
+                return;
+            }
+
             AvoidFocus(scale);
             Rect panel = PanelRect(scale, _dock);
             int pointerControl = GUIUtility.GetControlID(FocusType.Passive);
@@ -187,6 +195,39 @@ namespace CityTwin.Calibration
             DrawGrips(panel);
 
             GUI.matrix = previousMatrix;
+        }
+
+        private const float CompactWidth = 560f;
+        private const float CompactButtonHeight = 40f;
+        // Kept well inside the window: a projector can crop the outer edge of its image.
+        private const float CompactInset = 0.07f;
+
+        // One row of big buttons, centred at the bottom (the black band under a letterboxed frame); the on-table text says what to do.
+        private void DrawCompactCapture()
+        {
+            var session = _sensors.Session;
+            float screenW = Screen.width / Scale, screenH = Screen.height / Scale;
+            float height = CompactButtonHeight + 16f;
+            var area = new Rect((screenW - CompactWidth) * 0.5f, screenH * (1f - CompactInset) - height, CompactWidth, height);
+            GUILayout.BeginArea(area, _panel);
+            GUILayout.BeginHorizontal();
+            var tall = GUILayout.Height(CompactButtonHeight);
+            if (session.IsClearingTable)
+            {
+                GUILayout.Label("Clear the table", _label, tall);
+            }
+            else
+            {
+                int shown = Mathf.Min(session.CurrentIndex + 1, session.Targets.Count);
+                GUILayout.Label($"{shown}/{session.Targets.Count}", _label, GUILayout.Width(44f), tall);
+                if (GUILayout.Button("Back", _button, tall, GUILayout.Width(110f))) Later(() => _sensors.BackTarget());
+                if (GUILayout.Button("Next", session.AwaitingNext ? _primary : _button, tall, GUILayout.Width(130f))) Later(() => _sensors.NextTarget());
+                if (GUILayout.Button("Skip", _button, tall)) Later(() => _sensors.SkipTarget());
+            }
+            if (GUILayout.Button("Restart", _button, tall)) Later(() => _sensors.RequestRecapture());
+            if (GUILayout.Button("Menu", _button, tall)) Later(() => _sensors.ShowVerify());
+            GUILayout.EndHorizontal();
+            GUILayout.EndArea();
         }
 
         /// <summary>A small way back when the panel is hidden to see the whole table.</summary>
@@ -549,17 +590,40 @@ namespace CityTwin.Calibration
         private void DrawCaptureCard()
         {
             var session = _sensors.Session;
+            if (session.IsClearingTable)
+            {
+                BeginCard("Waiting for an empty table");
+                GUILayout.Label("Remove all tiles from the table. The first target appears once it has been empty for a moment.", _label);
+                GUILayout.Label(_sensors.TileCount > 0 ? $"{_sensors.TileCount} tile(s) still seen" : $"Empty {session.ClearProgress * 100f:0}%", _muted);
+                ProgressBar(session.ClearProgress);
+                if (GUILayout.Button("Start again", _button, GUILayout.Height(RowHeight))) Later(() => _sensors.RequestRecapture());
+                EndCard();
+                return;
+            }
+
             int shown = Mathf.Min(session.CurrentIndex + 1, session.Targets.Count);
             BeginCard($"Target {shown} of {session.Targets.Count}");
-            GUILayout.Label("Put any tile on the yellow cross and let go.", _label);
-            GUILayout.Label((session.HasMarker ? $"Hold still {session.Progress * 100f:0}%" : "No tile seen yet") + $"   ({session.CapturedCount} captured)", _muted);
-            ProgressBar(session.Progress);
+            if (session.AwaitingNext)
+            {
+                GUILayout.Label("Stored. Press Next, then move the tile to the next cross.", _label);
+                GUILayout.Label($"({session.CapturedCount} captured)", _muted);
+                ProgressBar(1f);
+            }
+            else
+            {
+                GUILayout.Label("Put any tile on the yellow cross and let go.", _label);
+                GUILayout.Label((session.HasMarker ? $"Hold still {session.Progress * 100f:0}%" : "No tile seen yet") + $"   ({session.CapturedCount} captured)", _muted);
+                ProgressBar(session.Progress);
+            }
             if (session.HasFit)
                 GUILayout.Label($"Fit so far: avg error {session.Report.RmsError * CmPerUv:0.0} cm, worst {session.Report.MaxError * CmPerUv:0.0} cm", _muted);
             GUILayout.BeginHorizontal();
-            if (GUILayout.Button("Capture now", _primary, GUILayout.Height(RowHeight))) Later(() => _sensors.CaptureNow());
-            if (GUILayout.Button("Back", _button, GUILayout.Height(RowHeight))) Later(() => _sensors.BackTarget());
-            if (GUILayout.Button("Skip", _button, GUILayout.Height(RowHeight))) Later(() => _sensors.SkipTarget());
+            if (GUILayout.Button("Next (Enter)", session.AwaitingNext ? _primary : _button, GUILayout.Height(RowHeight))) Later(() => _sensors.NextTarget());
+            if (GUILayout.Button("Capture now (Space)", session.AwaitingNext ? _button : _primary, GUILayout.Height(RowHeight))) Later(() => _sensors.CaptureNow());
+            GUILayout.EndHorizontal();
+            GUILayout.BeginHorizontal();
+            if (GUILayout.Button("Back (Backspace)", _button, GUILayout.Height(RowHeight))) Later(() => _sensors.BackTarget());
+            if (GUILayout.Button("Skip (X)", _button, GUILayout.Height(RowHeight))) Later(() => _sensors.SkipTarget());
             GUILayout.EndHorizontal();
             if (GUILayout.Button("Start again", _button, GUILayout.Height(RowHeight))) Later(() => _sensors.RequestRecapture());
             EndCard();
@@ -584,7 +648,7 @@ namespace CityTwin.Calibration
             }
             else
             {
-                GUILayout.Label("This camera has no fit yet, so tiles use raw camera coordinates.", _label);
+                GUILayout.Label("This camera has no fit yet, so tiles assume the camera sees exactly the projected frame.", _label);
             }
             GUILayout.BeginHorizontal();
             if (GUILayout.Button(_sensors.IsFitted ? "Capture again" : "Start capture", _primary, GUILayout.Height(RowHeight))) Later(() => _sensors.StartCapture());

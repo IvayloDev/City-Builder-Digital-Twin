@@ -30,6 +30,8 @@ namespace CityTwin.Calibration
         private const float AutoRadiusMarginCm = 0.05f;
         private const float MaxAutoJitterCm = 3f;
         private const float PoorFitMaxCm = 3f;
+        // A fit this far off on average comes from a bad capture (e.g. one tile stored for two targets): never save it.
+        private const float RejectFitRmsCm = 5f;
 
         private readonly ProjectionOutputRig _rig;
         private readonly Func<Key, string, bool> _confirm;
@@ -58,6 +60,8 @@ namespace CityTwin.Calibration
         public PlayArea SelectedArea => _selected < _areas.Count ? _areas[_selected] : null;
         public bool HasCaptureInProgress => IsCapturing && _session.CapturedCount > 0;
         public int SelectedIndex => _selected;
+        /// <summary>Markers the camera reports right now.</summary>
+        public int TileCount => _markers.Count;
         public bool IsCapturing => _capturing && _session != null;
         public SensorCalibrationSession Session => _session;
         public IReadOnlyList<SensorMarker> Markers => _markers;
@@ -235,7 +239,7 @@ namespace CityTwin.Calibration
 
         public void RequestClearFit()
         {
-            if (!_confirm(Key.C, "Press again to clear this camera's fit (raw camera coordinates until recaptured)")) return;
+            if (!_confirm(Key.C, "Press again to clear this camera's fit (projector-frame default until recaptured)")) return;
             var sensor = Sensor;
             if (sensor == null) return;
             Saved?.ClearFit();
@@ -252,6 +256,11 @@ namespace CityTwin.Calibration
         public void BackTarget()
         {
             if (IsCapturing && !_session.Back()) _setStatus("Already on the first target");
+        }
+
+        public void NextTarget()
+        {
+            if (IsCapturing && !_session.Next()) _setStatus("Capture this target first");
         }
 
         public void SkipTarget()
@@ -350,6 +359,7 @@ namespace CityTwin.Calibration
             if (kb.xKey.wasPressedThisFrame) SkipTarget();
             if (kb.backspaceKey.wasPressedThisFrame) BackTarget();
             if (kb.spaceKey.wasPressedThisFrame) CaptureNow();
+            if (kb.enterKey.wasPressedThisFrame || kb.numpadEnterKey.wasPressedThisFrame || kb.nKey.wasPressedThisFrame) NextTarget();
 
             if (kb.leftBracketKey.wasPressedThisFrame) SetRadius(Filter.radiusCm - (shift ? RadiusStepLargeCm : RadiusStepCm));
             if (kb.rightBracketKey.wasPressedThisFrame) SetRadius(Filter.radiusCm + (shift ? RadiusStepLargeCm : RadiusStepCm));
@@ -380,6 +390,13 @@ namespace CityTwin.Calibration
             if (!session.HasFit)
             {
                 _setStatus($"Only {session.CapturedCount} points captured, 4 are needed: start the capture again");
+                return;
+            }
+            double rmsCm = session.Report.RmsError * SensorInputFilter.TableWidthCm;
+            if (rmsCm > RejectFitRmsCm)
+            {
+                Debug.LogWarning($"[SensorCalibration] Fit rejected: average error {rmsCm:0.0} cm over {session.Report.PointCount} points (lens k1 {session.Report.K1:0.000}).");
+                _setStatus($"Fit rejected: average error {rmsCm:0.0} cm. Nothing was changed: start the capture again");
                 return;
             }
             var saved = File.GetOrAddSensor(sensor.SensorIndex);
@@ -419,7 +436,7 @@ namespace CityTwin.Calibration
         public bool TryGetFocus(out Vector2 tableUv)
         {
             tableUv = default;
-            if (!IsCapturing || _session.IsComplete) return false;
+            if (!IsCapturing || _session.IsComplete || _session.IsClearingTable) return false;
             tableUv = _session.Targets[_session.CurrentIndex];
             return true;
         }
@@ -458,6 +475,10 @@ namespace CityTwin.Calibration
             into.Clear();
             if (IsCapturing)
             {
+                // Where the camera sees each tile right now: the fit so far once there is one, else the projector-frame guess.
+                var preview = _session.HasFit ? _session.Fit : Sensor != null ? Sensor.DefaultCameraMapping : null;
+                AddLiveTiles(projector, preview, into);
+                if (_session.IsClearingTable) return; // no targets until the table is empty
                 for (int i = 0; i < _session.Targets.Count; i++)
                 {
                     if (!_rig.TryTableUvToProjector(_session.Targets[i], out int p, out Vector2 uv) || p != projector) continue;
@@ -465,7 +486,8 @@ namespace CityTwin.Calibration
                     into.Add(new ProjectorOverlay.Marker
                     {
                         Uv = uv,
-                        Kind = current ? ProjectorOverlay.MarkerKind.TargetCurrent : KindOf(_session.StateOf(i)),
+                        Kind = !current ? KindOf(_session.StateOf(i))
+                            : _session.AwaitingNext ? ProjectorOverlay.MarkerKind.TargetStored : ProjectorOverlay.MarkerKind.TargetCurrent,
                         Progress = current ? _session.Progress : 0f,
                     });
                 }
@@ -473,7 +495,12 @@ namespace CityTwin.Calibration
             }
 
             CollectAreaMarkers(projector, into, false);
-            if (!IsFitted) return;
+            if (!IsFitted)
+            {
+                // Not calibrated yet: still show where each tile is seen, through the projector-frame guess.
+                AddLiveTiles(projector, Sensor != null ? Sensor.DefaultCameraMapping : null, into);
+                return;
+            }
             var saved = Saved;
             float now = Time.unscaledTime;
             foreach (var m in _markers)
@@ -487,6 +514,14 @@ namespace CityTwin.Calibration
                 if (_rig.TryTableUvToProjector(filter.Output, out int p, out Vector2 uv) && p == projector)
                     into.Add(new ProjectorOverlay.Marker { Uv = uv, Kind = ProjectorOverlay.MarkerKind.LiveTile });
             }
+        }
+
+        private void AddLiveTiles(int projector, SensorMapping mapping, List<ProjectorOverlay.Marker> into)
+        {
+            if (mapping == null) return;
+            foreach (var m in _markers)
+                if (_rig.TryTableUvToProjector(mapping.Map(m.Raw), out int p, out Vector2 uv) && p == projector)
+                    into.Add(new ProjectorOverlay.Marker { Uv = uv, Kind = ProjectorOverlay.MarkerKind.LiveTile });
         }
 
         private static ProjectorOverlay.MarkerKind KindOf(SensorTargetState state)
@@ -512,7 +547,13 @@ namespace CityTwin.Calibration
         {
             if (Sensor == null) return "CAMERA: no game running";
             if (!IsCapturing) return IsFitted ? "CAMERA: slide a tile, the pink square should sit under it" : "CAMERA: not fitted";
+            if (_session.IsClearingTable) return "CAMERA: remove all tiles from the table";
             int shown = Mathf.Min(_session.CurrentIndex + 1, _session.Targets.Count);
+            if (_session.AwaitingNext)
+                return _session.AutoAdvanceIn >= 0f
+                    ? $"CAMERA: stored ({shown}/{_session.Targets.Count})  -  next in {Mathf.CeilToInt(_session.AutoAdvanceIn)} s"
+                    : $"CAMERA: stored ({shown}/{_session.Targets.Count})  -  press Next";
+            if (_session.WaitingForMove) return $"CAMERA: move the tile to the yellow cross ({shown}/{_session.Targets.Count})";
             string hold = _session.HasMarker ? $"   hold still {_session.Progress * 100f:0}%" : "";
             return $"CAMERA: put a tile on the yellow cross ({shown}/{_session.Targets.Count}){hold}";
         }

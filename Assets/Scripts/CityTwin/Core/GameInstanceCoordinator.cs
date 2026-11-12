@@ -45,6 +45,8 @@ namespace CityTwin.Core
         // Tiles that sat on the table while the tutorial locked it (e.g. the language-select tile);
         // they must move before they count as a placement.
         private readonly Dictionary<string, Vector2> _parkedTilePositions = new Dictionary<string, Vector2>();
+        // Stand-in pins showing physical tiles that lie on the table while it is locked (not yet counted).
+        private readonly Dictionary<string, RectTransform> _parkedPins = new Dictionary<string, RectTransform>();
         private int _overBudgetCounter;
 
         /// <summary>Current budget for this instance. Decremented when placing tiles.</summary>
@@ -236,6 +238,8 @@ namespace CityTwin.Core
             _oscToEngineTileId.Clear();
             _overBudgetTiles.Clear();
             _parkedTilePositions.Clear();
+            foreach (var pin in _parkedPins.Values) if (pin != null) Destroy(pin.gameObject);
+            _parkedPins.Clear();
 
             if (configLoader?.Config != null)
                 Budget = configLoader.Config.Budget?.startingBudget ?? 1000;
@@ -682,6 +686,7 @@ namespace CityTwin.Core
             if (tutorialSequence != null && tutorialSequence.TileEditsBlocked)
             {
                 _parkedTilePositions[pose.TileId] = pose.Position;
+                ShowParkedPin(pose);
                 return;
             }
             // A tile parked on the table before the gate opened only counts once the player actually
@@ -692,6 +697,7 @@ namespace CityTwin.Core
                 if ((pose.Position - parkedAt).sqrMagnitude < moveThreshold * moveThreshold) return;
                 _parkedTilePositions.Remove(pose.TileId);
             }
+            DropParkedPin(pose.TileId);
             if (simulationEngine == null) { Debug.LogWarning("[Coordinator] simulationEngine is null, skipping."); return; }
             placementOverlapValidator?.RefreshHubFootprints();
 
@@ -817,10 +823,27 @@ namespace CityTwin.Core
             buildingSpawner.SetMarkerConnectionState(engineId, state);
         }
 
+        private void ShowParkedPin(TilePose pose)
+        {
+            if (buildingSpawner == null || string.IsNullOrEmpty(pose.TileId)) return;
+            if (_parkedPins.TryGetValue(pose.TileId, out RectTransform pin) && pin != null)
+                buildingSpawner.PlaceStandIn(pin, pose.Position);
+            else
+                _parkedPins[pose.TileId] = buildingSpawner.CreateStandIn(pose.BuildingId, pose.Position);
+        }
+
+        private void DropParkedPin(string tileId)
+        {
+            if (string.IsNullOrEmpty(tileId) || !_parkedPins.TryGetValue(tileId, out RectTransform pin)) return;
+            _parkedPins.Remove(tileId);
+            if (pin != null) Destroy(pin.gameObject);
+        }
+
         private void OnTileRemoved(string oscTileId)
         {
             OnTileActivity?.Invoke();
             _parkedTilePositions.Remove(oscTileId); // lifted off the table: no longer parked
+            DropParkedPin(oscTileId);
             if (simulationEngine == null) return;
             if (_oscToEngineTileId.TryGetValue(oscTileId, out string engineId))
             {

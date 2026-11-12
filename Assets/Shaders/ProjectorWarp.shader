@@ -93,6 +93,7 @@ Shader "CityTwin/ProjectorWarp"
 
             half4 frag(Varyings i) : SV_Target
             {
+                if (any(i.uv < 0.0) || any(i.uv > 1.0)) return half4(0.0, 0.0, 0.0, 1.0); // off the table: black, not smeared edge pixels
                 half3 col = SAMPLE_TEXTURE2D(_MainTex, sampler_MainTex, i.uv).rgb;
 
                 int mode = (int)round(_PatternMode);

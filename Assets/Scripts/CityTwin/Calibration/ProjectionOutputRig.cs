@@ -3,6 +3,7 @@ using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.InputSystem.UI;
 using UnityEngine.SceneManagement;
+using UnityEngine.UI;
 using CityTwin.Core;
 
 namespace CityTwin.Calibration
@@ -36,7 +37,7 @@ namespace CityTwin.Calibration
         [SerializeField] private int meshResolution = 32;
 
         [Tooltip("Table setup used until staff pick one: pilot (1 camera, 1 projector) or testrig (4 stations, 2 projectors). " +
-                 "Staff switch in calibration mode (F9, then O) and the choice is remembered; the launch option -tableSetup <id> overrides both.")]
+                 "Staff switch in calibration mode (Ctrl+Shift+F4, then O) and the choice is remembered; the launch option -tableSetup <id> overrides both.")]
         [SerializeField] private string defaultSetup = "pilot";
 
         [Tooltip("Load projector calibration from the active setup's saved calibration file (site, then shipped, then placeholder). Off = use the list below.")]
@@ -44,6 +45,9 @@ namespace CityTwin.Calibration
 
         [Tooltip("Per-projector calibration. In Play mode with Use Saved Calibration on, this shows the live loaded data (edits apply immediately; use Save Calibration to keep them). Empty = the active setup's placeholder layout.")]
         [SerializeField] private List<ProjectorCalibration> projectors = new List<ProjectorCalibration>();
+
+        [Tooltip("One projector (pilot): scale the canvas so the square table image is exactly as wide as the flat view (rig off) at the projector's shape. The projector then shows the same picture as a flat window instead of a narrower, cropped one. Off = the canvas keeps its own scaling into the square image.")]
+        [SerializeField] private bool matchFlatViewForSingleProjector = true;
 
         [Tooltip("Test pattern on every projector (grid, table rim, central piece, seam). Calibration mode drives this while open.")]
         [SerializeField] private TestPattern testPattern = TestPattern.Off;
@@ -53,6 +57,12 @@ namespace CityTwin.Calibration
         private static readonly Vector2 OffTable = new Vector2(-100000f, -100000f);
 
         private readonly List<ProjectorOutput> _outputs = new List<ProjectorOutput>();
+        private CanvasScaler _flatViewScaler;
+        private CanvasScaler.ScaleMode _previousScaleMode;
+        private float _previousScaleFactor;
+
+        /// <summary>The table image is scaled to the flat view's width (single projector): the frame x 0..1, centred, is exactly the flat picture.</summary>
+        public bool UsesFlatView { get; private set; }
         private readonly List<Camera> _backdrops = new List<Camera>();
         private readonly List<int> _hookedPointerBindings = new List<int>();
         private InputAction _hookedPointerAction;
@@ -144,6 +154,7 @@ namespace CityTwin.Calibration
                 projectors = ActiveSetup.CreateDefaultProjectors();
 
             CreateTableTexture();
+            MatchFlatView();
             RedirectSourceCamera(_outputLayer);
             CreateOutputs();
             Active = this;
@@ -152,6 +163,7 @@ namespace CityTwin.Calibration
 
         private void OnDisable()
         {
+            RestoreCanvasScaler();
             UnhookUiPointer();
             if (Active == this) Active = null;
             DestroyOutputs();
@@ -200,6 +212,7 @@ namespace CityTwin.Calibration
                 if (!r.Contains(windowPosition)) continue;
                 var projectorUv = new Vector2((windowPosition.x - r.x) / r.width, (windowPosition.y - r.y) / r.height);
                 Vector2 uv = ProjectionMath.ProjectorUvToTableUv(o.Calibration, o.ProjectorToTable, projectorUv);
+                if (!float.IsFinite(uv.x) || !float.IsFinite(uv.y)) continue; // degenerate mapping: treat as off-table
                 if (!o.Calibration.KeepsTablePoint(uv)) continue;
                 return new Vector2(uv.x * _tableTexture.width, uv.y * _tableTexture.height);
             }
@@ -217,6 +230,7 @@ namespace CityTwin.Calibration
                 if (o == null || o.OutputCamera == null || o.OutputCamera.targetDisplay != 0) continue;
                 if (!o.Calibration.KeepsTablePoint(uv)) continue;
                 Vector2 p = ProjectionMath.TableUvToProjectorUv(o.Calibration, o.TableToProjector, uv);
+                if (!float.IsFinite(p.x) || !float.IsFinite(p.y)) continue;
                 if (p.x < 0f || p.x > 1f || p.y < 0f || p.y > 1f) continue;
                 Rect r = o.OutputCamera.pixelRect;
                 return new Vector2(r.x + p.x * r.width, r.y + p.y * r.height);
@@ -437,6 +451,58 @@ namespace CityTwin.Calibration
             cam.allowHDR = false;
             cam.allowMSAA = false;
             _backdrops.Add(cam);
+        }
+
+        /// <summary>
+        /// The canvas scales with screen size. Rendered into the square table image it would get the square's canvas size
+        /// (narrower than a 16:10 screen's), so the outer strips of the game, visible in a flat window, fall off the table
+        /// image and the projector shows a cropped, roughly 4:3 picture. With one projector, scale the canvas instead so
+        /// the table image spans exactly the flat view's width at the projector's shape.
+        /// </summary>
+        private void MatchFlatView()
+        {
+            UsesFlatView = false;
+            if (!matchFlatViewForSingleProjector || projectors == null || projectors.Count != 1) return;
+
+            CanvasScaler scaler = null;
+            foreach (var canvas in FindObjectsByType<Canvas>(FindObjectsInactive.Exclude, FindObjectsSortMode.None))
+            {
+                if (!canvas.isRootCanvas || canvas.renderMode != RenderMode.ScreenSpaceCamera || canvas.worldCamera != sourceCamera) continue;
+                scaler = canvas.GetComponent<CanvasScaler>();
+                if (scaler != null) break;
+            }
+            if (scaler == null || scaler.uiScaleMode != CanvasScaler.ScaleMode.ScaleWithScreenSize
+                || scaler.screenMatchMode != CanvasScaler.ScreenMatchMode.MatchWidthOrHeight)
+            {
+                Debug.LogWarning("[ProjectionOutputRig] No 'Scale With Screen Size / Match Width Or Height' canvas on the source camera; the table image keeps the canvas's own scaling.", this);
+                return;
+            }
+
+            float aspect = projectors[0].aspect > 0f ? projectors[0].aspect : 16f / 10f;
+            Vector2 reference = scaler.referenceResolution;
+            // CanvasScaler's own formula for a screen of this shape (size cancels out): canvas width in canvas units.
+            float logWidth = Mathf.Log(aspect / reference.x, 2f), logHeight = Mathf.Log(1f / reference.y, 2f);
+            float flatScale = Mathf.Pow(2f, Mathf.Lerp(logWidth, logHeight, scaler.matchWidthOrHeight));
+            float flatWidthUnits = aspect / flatScale;
+
+            _flatViewScaler = scaler;
+            _previousScaleMode = scaler.uiScaleMode;
+            _previousScaleFactor = scaler.scaleFactor;
+            scaler.uiScaleMode = CanvasScaler.ScaleMode.ConstantPixelSize;
+            scaler.scaleFactor = _tableTexture.width / flatWidthUnits;
+            UsesFlatView = true;
+            Debug.Log($"[ProjectionOutputRig] Table image matches the flat {aspect:F2} view: {flatWidthUnits:F0} canvas units across ({scaler.scaleFactor:F3} px per unit).", this);
+        }
+
+        private void RestoreCanvasScaler()
+        {
+            if (_flatViewScaler != null)
+            {
+                _flatViewScaler.uiScaleMode = _previousScaleMode;
+                _flatViewScaler.scaleFactor = _previousScaleFactor;
+            }
+            _flatViewScaler = null;
+            UsesFlatView = false;
         }
 
         private void CreateTableTexture()

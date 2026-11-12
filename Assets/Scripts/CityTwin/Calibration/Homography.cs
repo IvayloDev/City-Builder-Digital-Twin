@@ -71,7 +71,7 @@ namespace CityTwin.Calibration
             double c02 = m10 * m21 - m11 * m20;
             double det = m00 * c00 + m01 * c01 + m02 * c02;
             double scale = MaxAbs();
-            if (scale <= 0 || Math.Abs(det) < 1e-12 * scale * scale * scale)
+            if (scale <= 0 || double.IsNaN(det) || double.IsInfinity(det) || double.IsInfinity(scale) || Math.Abs(det) < 1e-12 * scale * scale * scale)
             {
                 inverse = Identity;
                 return false;
@@ -145,6 +145,7 @@ namespace CityTwin.Calibration
             }
 
             if (!SolveLinear(ata, atb, out double[] p)) return false;
+            foreach (double v in p) if (double.IsNaN(v) || double.IsInfinity(v)) return false;
 
             var hn = new Homography
             {

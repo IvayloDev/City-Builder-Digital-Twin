@@ -103,6 +103,7 @@ namespace CityTwin.Calibration
             meshGo.transform.localPosition = new Vector3(0f, 0f, 1f);
 
             ApplyOutputSettings();
+            SolveMapping(); // valid before the first pointer sample; LateUpdate builds the mesh
         }
 
         /// <summary>Call after changing control points or mesh offsets.</summary>
@@ -140,7 +141,19 @@ namespace CityTwin.Calibration
             _dirty = false;
             _builtAspect = aspect;
 
-            // Keep the last good mapping if the points are momentarily degenerate (e.g. mid-drag).
+            SolveMapping();
+
+            ProjectionMath.BuildWarpVertices(Calibration, _projectorToTable, _meshResolution, _meshResolution, aspect, _vertices, _uvs);
+            _mesh.vertices = _vertices;
+            _mesh.uv = _uvs;
+            // Vertices can sit anywhere in the frame (or off it); never let bounds culling drop the mesh.
+            _mesh.bounds = new Bounds(Vector3.zero, new Vector3(10000f, 10000f, 10f));
+        }
+
+        /// <summary>Table &lt;-&gt; projector homographies from the control points. Keeps the last good mapping if the
+        /// points are momentarily degenerate (e.g. mid-drag); falls back to full-frame until there is one.</summary>
+        private void SolveMapping()
+        {
             if (Calibration.TryGetTableToProjector(out Homography h) && h.TryInverse(out Homography inv))
             {
                 _tableToProjector = h;
@@ -154,12 +167,6 @@ namespace CityTwin.Calibration
                 _projectorToTable = Homography.Identity;
                 _hasMapping = true;
             }
-
-            ProjectionMath.BuildWarpVertices(Calibration, _projectorToTable, _meshResolution, _meshResolution, aspect, _vertices, _uvs);
-            _mesh.vertices = _vertices;
-            _mesh.uv = _uvs;
-            // Vertices can sit anywhere in the frame (or off it); never let bounds culling drop the mesh.
-            _mesh.bounds = new Bounds(Vector3.zero, new Vector3(10000f, 10000f, 10f));
         }
 
         private void PushMaterialSettings()

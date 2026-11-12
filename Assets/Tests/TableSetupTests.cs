@@ -103,36 +103,26 @@ namespace CityTwin.Tests
         private static bool InFrame(Vector2 p) => p.x >= -1e-4f && p.x <= 1f + 1e-4f && p.y >= -1e-4f && p.y <= 1f + 1e-4f;
 
         [Test]
-        public void PilotLayout_FramesPlayArea1()
+        public void PilotLayout_IsTheFlatView()
         {
             var layout = TableSetups.Pilot.CreateDefaultProjectors();
             Assert.That(layout.Count, Is.EqualTo(1));
             var cal = layout[0];
             Assert.That(cal.seamEnabled, Is.False);
+            Assert.That(cal.aspect, Is.EqualTo(16f / 10f).Within(1e-5f));
             Assert.That(cal.TryGetTableToProjector(out var h), Is.True);
 
-            // Play area 1 = the bottom wedge (game mask: 224-316 degrees, radius 0.195-0.46 table uv). All of it in frame.
-            for (int ai = 0; ai <= 12; ai++)
-                for (int ri = 0; ri <= 6; ri++)
-                {
-                    float a = Mathf.Deg2Rad * (224f + 92f * ai / 12f);
-                    float r = 0.195f + (0.46f - 0.195f) * ri / 6f;
-                    var uv = new Vector2(0.5f + r * Mathf.Cos(a), 0.5f + r * Mathf.Sin(a));
-                    Assert.That(InFrame(h.Apply(uv)), Is.True, $"wedge point {uv} -> {h.Apply(uv)}");
-                }
+            // The rig scales the canvas so the table image is exactly the flat view's width: the frame is the full
+            // width of the table image, centred, as tall as the projector's shape allows.
+            Assert.That(Vector2.Distance(h.Apply(new Vector2(0f, 0.5f - 0.5f / cal.aspect)), Vector2.zero), Is.LessThan(1e-4f));
+            Assert.That(Vector2.Distance(h.Apply(new Vector2(1f, 0.5f + 0.5f / cal.aspect)), Vector2.one), Is.LessThan(1e-4f));
+            Assert.That(Vector2.Distance(h.Apply(new Vector2(0.5f, 0.5f)), new Vector2(0.5f, 0.5f)), Is.LessThan(1e-4f));
+            Assert.That(InFrame(h.Apply(new Vector2(0.5f, 0.1f))), Is.False, "outside the flat view stays out of frame");
 
-            // Centred horizontally on play area 1; the zone sits above the frame centre so the pins below fit.
-            Vector2 zoneCenter = h.Apply(ProjectorCalibration.PlayArea1Center);
-            Assert.That(zoneCenter.x, Is.EqualTo(0.5f).Within(1e-4f));
-            Assert.That(zoneCenter.y, Is.GreaterThan(0.5f));
-            Assert.That(Vector2.Distance(h.Apply(ProjectorCalibration.PilotFrameCenter), new Vector2(0.5f, 0.5f)), Is.LessThan(1e-4f));
-
-            // The table centre and the top game are out of frame; the frame keeps the table undistorted on 16:9.
-            Assert.That(InFrame(h.Apply(new Vector2(0.5f, 0.5f))), Is.False);
-            Assert.That(InFrame(h.Apply(new Vector2(0.5f, 0.85f))), Is.False);
-            Vector2 dx = h.Apply(new Vector2(0.6f, 0.2f)) - h.Apply(new Vector2(0.5f, 0.2f));
-            Vector2 dy = h.Apply(new Vector2(0.5f, 0.3f)) - h.Apply(new Vector2(0.5f, 0.2f));
-            Assert.That(dx.x * 16f / (dy.y * 9f), Is.EqualTo(1f).Within(1e-3f));
+            // Undistorted on the projector's 16:10 image.
+            Vector2 dx = h.Apply(new Vector2(0.6f, 0.5f)) - h.Apply(new Vector2(0.5f, 0.5f));
+            Vector2 dy = h.Apply(new Vector2(0.5f, 0.6f)) - h.Apply(new Vector2(0.5f, 0.5f));
+            Assert.That(dx.x * 16f / (dy.y * 10f), Is.EqualTo(1f).Within(1e-3f));
         }
 
         [Test]

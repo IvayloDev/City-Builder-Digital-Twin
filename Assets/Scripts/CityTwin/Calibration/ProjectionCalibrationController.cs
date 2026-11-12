@@ -7,7 +7,7 @@ using UnityEngine.InputSystem;
 namespace CityTwin.Calibration
 {
     /// <summary>
-    /// Calibration mode (staff only; the audience never touches a keyboard). F9 opens the <see cref="CalibrationMenu"/> panel,
+    /// Calibration mode (staff only; the audience never touches a keyboard). Ctrl+Shift+F4 opens the <see cref="CalibrationMenu"/> panel,
     /// whose tabs are 1 Projector (output warp), 2 Camera (input mapping and jitter filter, see <see cref="SensorCalibrationTab"/>)
     /// and Table setup. Keyboard shortcuts do the same as the buttons, for staff standing at the table.
     /// The menu works on one play area at a time (Tab steps to the next): the Camera tab is that area's own camera,
@@ -20,7 +20,6 @@ namespace CityTwin.Calibration
     [RequireComponent(typeof(ProjectionOutputRig))]
     public class ProjectionCalibrationController : MonoBehaviour
     {
-        [SerializeField] private Key toggleKey = Key.F9;
 
         [Tooltip("CityTwin/CalibrationOverlay. Assigned here so the shader is included in builds.")]
         [SerializeField] private Shader overlayShader;
@@ -149,7 +148,7 @@ namespace CityTwin.Calibration
             if (kb == null) return;
 
             if (_active) _menu.RunPending();
-            if (kb[toggleKey].wasPressedThisFrame)
+            if (kb.ctrlKey.isPressed && kb.shiftKey.isPressed && kb.f4Key.wasPressedThisFrame)
             {
                 if (!_active) Open();
                 else if (HasUnsavedChanges) SetStatus("Unsaved changes: Enter = save & close, Esc = discard & close");
@@ -186,6 +185,7 @@ namespace CityTwin.Calibration
             ApplyPatternAndTint();
 
             // Clicks and keys must not drive game UI while calibrating.
+            if (_reenableRoutine != null) { StopCoroutine(_reenableRoutine); _reenableRoutine = null; }
             _eventSystem = EventSystem.current;
             if (_eventSystem != null) _eventSystem.enabled = false;
             SetStatus($"Calibration open ({_rig.Store.CurrentSource} calibration loaded)");
@@ -206,8 +206,30 @@ namespace CityTwin.Calibration
             _rig.Pattern = TestPattern.Off;
             foreach (var o in _rig.Outputs)
                 if (o != null) o.Tint = Color.white;
-            if (_eventSystem != null) _eventSystem.enabled = true;
+            // Not in this frame: the Enter that closed calibration is also the game UI's Submit, and would press
+            // whatever game button is selected (the game menu). Wait until it is released, with nothing selected.
+            if (_eventSystem != null)
+            {
+                if (isActiveAndEnabled) _reenableRoutine = StartCoroutine(ReenableEventSystem(_eventSystem));
+                else _eventSystem.enabled = true;
+            }
             _eventSystem = null;
+        }
+
+        private Coroutine _reenableRoutine;
+
+        private System.Collections.IEnumerator ReenableEventSystem(EventSystem eventSystem)
+        {
+            yield return null;
+            var kb = Keyboard.current;
+            while (kb != null && (kb.enterKey.isPressed || kb.numpadEnterKey.isPressed || kb.spaceKey.isPressed))
+                yield return null;
+            if (eventSystem != null)
+            {
+                eventSystem.SetSelectedGameObject(null);
+                eventSystem.enabled = true;
+            }
+            _reenableRoutine = null;
         }
 
         private void OnOutputsRebuilt()
@@ -235,10 +257,12 @@ namespace CityTwin.Calibration
             bool shift = kb.shiftKey.isPressed;
             bool fine = kb.altKey.isPressed || kb.ctrlKey.isPressed;
 
-            if (kb.nKey.wasPressedThisFrame) SwitchTab();
+            // During a camera capture N and Enter mean Next target (handled by the camera tab), not switch tab / save.
+            bool capturing = _cameraTab && _sensorTab.IsCapturing;
+            if (kb.nKey.wasPressedThisFrame && !capturing) SwitchTab();
             if (kb.oKey.wasPressedThisFrame) { OpenSetupPage(); return; }
             if (kb.escapeKey.wasPressedThisFrame) { DiscardAndClose(); return; }
-            if (kb.enterKey.wasPressedThisFrame || kb.numpadEnterKey.wasPressedThisFrame)
+            if ((kb.enterKey.wasPressedThisFrame || kb.numpadEnterKey.wasPressedThisFrame) && !capturing)
             {
                 if (Save()) Close();
                 return;
@@ -622,6 +646,9 @@ namespace CityTwin.Calibration
 
         private void DrawOverlays()
         {
+            // Camera tab: black out the game so only the targets and the tiles the camera sees are projected.
+            var pattern = _cameraTab && !_setupPage ? TestPattern.Black : _pattern;
+            if (_rig.Pattern != pattern) _rig.Pattern = pattern;
             string hud = _hudVisible ? BuildHud() : null;
             if (_cameraTab) { DrawCameraTabOverlays(hud); return; }
             for (int i = 0; i < _overlays.Count && i < _rig.Outputs.Count; i++)

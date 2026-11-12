@@ -280,29 +280,144 @@ namespace CityTwin.Tests
             return new List<SensorMarker> { new SensorMarker { SessionId = session, Raw = raw, FirstSeen = firstSeen } };
         }
 
-        private static float Hold(SensorCalibrationSession s, List<SensorMarker> markers, float t, float seconds = 1.1f)
+        private static float Hold(SensorCalibrationSession s, List<SensorMarker> markers, float t, float seconds = SensorCalibrationSession.HoldSeconds + 0.1f)
         {
             for (float end = t + seconds; t < end; t += 0.05f) s.Feed(markers, t);
             return t;
         }
 
+        private static readonly List<SensorMarker> Empty = new List<SensorMarker>();
+
+        // A session past its "remove all tiles" step.
+        private static SensorCalibrationSession Started(out float t)
+        {
+            var s = new SensorCalibrationSession(Grid(), null);
+            t = Hold(s, Empty, 0f, SensorCalibrationSession.ClearSeconds + 0.1f);
+            Assert.IsFalse(s.IsClearingTable);
+            return s;
+        }
+
+        [Test]
+        public void ClearingTable_EndsOnlyAfterAnEmptyTableForClearSeconds()
+        {
+            var s = new SensorCalibrationSession(Grid(), null);
+            Assert.IsTrue(s.IsClearingTable);
+
+            float t = Hold(s, Marker(1, TableToRaw(s.Targets[0])), 0f, 3f);
+            Assert.IsTrue(s.IsClearingTable, "a tile on the table keeps it in the clearing step");
+            Assert.AreEqual(0, s.CapturedCount, "nothing is captured while clearing");
+
+            t = Hold(s, Empty, t, 0.5f);
+            Assert.IsTrue(s.IsClearingTable, "empty for less than ClearSeconds");
+            t = Hold(s, Marker(2, new Vector2(0.5f, 0.5f)), t, 0.1f);
+            t = Hold(s, Empty, t, 0.5f);
+            Assert.IsTrue(s.IsClearingTable, "a tile put back restarts the wait");
+
+            Hold(s, Empty, t, 0.7f);
+            Assert.IsFalse(s.IsClearingTable);
+            Assert.AreEqual(0, s.CurrentIndex);
+            Assert.IsFalse(s.Next(), "Next does nothing before a capture");
+        }
+
+        [Test]
+        public void Capture_NeedsHoldSecondsOfStillness()
+        {
+            var s = Started(out float t);
+            t = Hold(s, Marker(1, TableToRaw(s.Targets[0])), t, SensorCalibrationSession.HoldSeconds - 0.3f);
+            Assert.AreEqual(0, s.CapturedCount, "not still for long enough yet");
+            Hold(s, Marker(1, TableToRaw(s.Targets[0])), t, 0.5f);
+            Assert.AreEqual(1, s.CapturedCount);
+        }
+
+        [Test]
+        public void Capture_DoesNotAdvance_NextDoes()
+        {
+            var s = Started(out float t);
+            Hold(s, Marker(1, TableToRaw(s.Targets[0])), t);
+            Assert.AreEqual(1, s.CapturedCount);
+            Assert.AreEqual(0, s.CurrentIndex, "a capture waits for Next");
+            Assert.IsTrue(s.AwaitingNext);
+            Assert.IsFalse(s.CaptureNow(), "a stored target can't be captured again");
+
+            Assert.IsTrue(s.Next());
+            Assert.AreEqual(1, s.CurrentIndex);
+            Assert.IsFalse(s.AwaitingNext);
+        }
+
+        [Test]
+        public void StoredTileLeftStill_AdvancesByItself()
+        {
+            var s = Started(out float t);
+            t = Hold(s, Marker(1, TableToRaw(s.Targets[0])), t, SensorCalibrationSession.AutoAdvanceSeconds - 0.4f);
+            Assert.AreEqual(1, s.CapturedCount);
+            Assert.AreEqual(0, s.CurrentIndex, "not yet: still counting down");
+            Assert.Greater(s.AutoAdvanceIn, 0f);
+
+            Hold(s, Marker(1, TableToRaw(s.Targets[0])), t, 0.6f);
+            Assert.AreEqual(1, s.CurrentIndex, "still for AutoAdvanceSeconds: moves on without Next");
+            Assert.AreEqual(1, s.CapturedCount, "and the tile left there does not fill the next target");
+        }
+
+        [Test]
+        public void StoredTileMovedAway_WaitsForNext()
+        {
+            var s = Started(out float t);
+            t = Hold(s, Marker(1, TableToRaw(s.Targets[0])), t);
+            Assert.IsTrue(s.AwaitingNext);
+            Hold(s, Marker(1, TableToRaw(s.Targets[1])), t, 6f);
+            Assert.AreEqual(0, s.CurrentIndex, "moved off before the countdown ended: Next is needed");
+            Assert.AreEqual(-1f, s.AutoAdvanceIn);
+            Assert.IsTrue(s.Next());
+        }
+
+        [Test]
+        public void Next_WithoutCapture_ReturnsFalse()
+        {
+            var s = Started(out float t);
+            Assert.IsFalse(s.Next());
+            Hold(s, Marker(1, new Vector2(0.4f, 0.4f)), t, 0.5f);
+            Assert.IsFalse(s.Next(), "a tile still settling is not a capture");
+            Assert.AreEqual(0, s.CurrentIndex);
+        }
+
         [Test]
         public void RestingTile_AutoCapturesOnce()
         {
-            var s = new SensorCalibrationSession(Grid(), null);
-            float t = Hold(s, Marker(1, TableToRaw(s.Targets[0])), 0f);
+            var s = Started(out float t);
+            t = Hold(s, Marker(1, TableToRaw(s.Targets[0])), t);
             Assert.AreEqual(1, s.CapturedCount);
 
-            Hold(s, Marker(1, TableToRaw(s.Targets[0])), t, 3f);
+            s.Next();
+            Hold(s, Marker(1, TableToRaw(s.Targets[0])), t, 4f);
             Assert.AreEqual(1, s.CapturedCount, "a tile left in place must not fill the next target");
+            Assert.IsTrue(s.WaitingForMove);
+        }
+
+        [Test]
+        public void TileWithNewSessionIds_IsNotCapturedAgainInPlace()
+        {
+            // reacTIVision can issue a new session id for the same tile every frame.
+            var s = Started(out float t);
+            Vector2 at = TableToRaw(s.Targets[0]);
+            int session = 100;
+            for (float end = t + 2.5f; t < end; t += 0.05f) s.Feed(Marker(session++, at, t), t);
+            Assert.AreEqual(1, s.CapturedCount, "the hold follows the position, not the session id");
+
+            s.Next();
+            for (float end = t + 4f; t < end; t += 0.05f) s.Feed(Marker(session++, at, t), t);
+            Assert.AreEqual(1, s.CapturedCount, "the same tile with a new id must still be moved first");
+            Assert.AreEqual(1, s.CurrentIndex);
+
+            Vector2 next = TableToRaw(s.Targets[1]);
+            for (float end = t + 2.5f; t < end; t += 0.05f) s.Feed(Marker(session++, next, t), t);
+            Assert.AreEqual(2, s.CapturedCount, "moved to the next cross and held still: captured");
         }
 
         [Test]
         public void MovingTile_DoesNotCapture()
         {
-            var s = new SensorCalibrationSession(Grid(), null);
-            float t = 0f;
-            for (int i = 0; i < 60; i++, t += 0.05f)
+            var s = Started(out float t);
+            for (int i = 0; i < 80; i++, t += 0.05f)
                 s.Feed(Marker(1, new Vector2(0.1f + i * 0.01f, 0.5f)), t);
             Assert.AreEqual(0, s.CapturedCount);
         }
@@ -310,8 +425,9 @@ namespace CityTwin.Tests
         [Test]
         public void SameTileMovedToNextTarget_Captures()
         {
-            var s = new SensorCalibrationSession(Grid(), null);
-            float t = Hold(s, Marker(1, TableToRaw(s.Targets[0])), 0f);
+            var s = Started(out float t);
+            t = Hold(s, Marker(1, TableToRaw(s.Targets[0])), t);
+            Assert.IsTrue(s.Next());
             Hold(s, Marker(1, TableToRaw(s.Targets[1])), t);
             Assert.AreEqual(2, s.CapturedCount);
         }
@@ -319,21 +435,29 @@ namespace CityTwin.Tests
         [Test]
         public void NewestMarker_IsTheOneUsed()
         {
-            var s = new SensorCalibrationSession(Grid(), null);
+            var s = Started(out float t);
             var markers = new List<SensorMarker>
             {
                 new SensorMarker { SessionId = 1, Raw = new Vector2(0.9f, 0.9f), FirstSeen = 0f },
                 new SensorMarker { SessionId = 2, Raw = new Vector2(0.3f, 0.3f), FirstSeen = 5f },
             };
-            s.Feed(markers, 6f);
+            s.Feed(markers, t + 6f);
             Assert.AreEqual(new Vector2(0.3f, 0.3f), s.LiveRaw);
         }
 
         [Test]
         public void SkipAndBack_UpdateProgress()
         {
-            var s = new SensorCalibrationSession(Grid(), null);
-            float t = Hold(s, Marker(1, TableToRaw(s.Targets[0])), 0f);
+            var s = Started(out float t);
+            t = Hold(s, Marker(1, TableToRaw(s.Targets[0])), t);
+            Assert.IsTrue(s.Back(), "Back on a stored target retakes it");
+            Assert.AreEqual(0, s.CurrentIndex);
+            Assert.AreEqual(0, s.CapturedCount);
+            Assert.IsFalse(s.AwaitingNext);
+
+            t = Hold(s, Marker(1, TableToRaw(s.Targets[0])), t);
+            Assert.AreEqual(1, s.CapturedCount, "the tile can recapture a target it was taken back from");
+            s.Next();
             s.Skip();
             Assert.AreEqual(2, s.CurrentIndex);
             Assert.AreEqual(SensorTargetState.Skipped, s.StateOf(1));
@@ -345,16 +469,19 @@ namespace CityTwin.Tests
             Assert.IsFalse(s.Back());
 
             Hold(s, Marker(1, TableToRaw(s.Targets[0])), t);
-            Assert.AreEqual(1, s.CapturedCount, "the tile can recapture a target it was taken back from");
+            Assert.AreEqual(1, s.CapturedCount);
         }
 
         [Test]
         public void FullCapture_FitsTheCameraTransform()
         {
-            var s = new SensorCalibrationSession(Grid(), null);
-            float t = 0f;
+            var s = Started(out float t);
             for (int i = 0; i < 9; i++)
+            {
                 t = Hold(s, Marker(i, TableToRaw(s.Targets[i]), i), t);
+                Assert.IsFalse(s.IsComplete, "the last capture still waits for Next");
+                Assert.IsTrue(s.Next());
+            }
 
             Assert.IsTrue(s.IsComplete);
             Assert.IsTrue(s.HasFit);
@@ -366,10 +493,12 @@ namespace CityTwin.Tests
         [Test]
         public void FewerThanFourCaptures_HasNoFit()
         {
-            var s = new SensorCalibrationSession(Grid(), null);
-            float t = 0f;
+            var s = Started(out float t);
             for (int i = 0; i < 3; i++)
+            {
                 t = Hold(s, Marker(i, TableToRaw(s.Targets[i]), i), t);
+                s.Next();
+            }
             Assert.IsFalse(s.HasFit);
         }
 

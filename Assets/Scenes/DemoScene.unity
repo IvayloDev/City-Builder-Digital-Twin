@@ -6976,6 +6976,80 @@ RectTransform:
   m_AnchoredPosition: {x: 1159, y: 545}
   m_SizeDelta: {x: 78, y: 78}
   m_Pivot: {x: 0.5, y: 0.5}
+--- !u!1 &1775947198
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1775947200}
+  - component: {fileID: 1775947199}
+  - component: {fileID: 1775947201}
+  m_Layer: 0
+  m_Name: Projection Output
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &1775947199
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1775947198}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 11d3d7ccfa47d7e42a408a71322ed499, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::CityTwin.Calibration.ProjectionOutputRig
+  sourceCamera: {fileID: 96761466282609724}
+  tableResolution: 3840
+  warpShader: {fileID: 4800000, guid: da3763c968171e74fbc822a067a43d72, type: 3}
+  outputLayerName: ProjectionOutput
+  meshResolution: 32
+  defaultSetup: pilot
+  useSavedCalibration: 1
+  projectors: []
+  matchFlatViewForSingleProjector: 1
+  testPattern: 0
+--- !u!4 &1775947200
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1775947198}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: -10000, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &1775947201
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1775947198}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 97e0fc391f2ca0b46ac29eb246e75aa9, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::CityTwin.Calibration.ProjectionCalibrationController
+  overlayShader: {fileID: 4800000, guid: 44ebe5d802d9ca94da396fcf2a820560, type: 3}
+  projectorTints:
+  - {r: 1, g: 0.35, b: 1, a: 1}
+  - {r: 0.3, g: 0.85, b: 1, a: 1}
+  - {r: 1, g: 0.9, b: 0.3, a: 1}
+  - {r: 0.4, g: 1, b: 0.4, a: 1}
+  mousePickRadiusPx: 40
 --- !u!1 &1782655654 stripped
 GameObject:
   m_CorrespondingSourceObject: {fileID: 8472831863285244296, guid: 77a1354cf587a2645b0121e46df46392, type: 3}
@@ -9288,80 +9362,6 @@ MonoBehaviour:
     m_VarianceClampScale: 0.9
     m_ContrastAdaptiveSharpening: 0
   m_Version: 2
---- !u!1 &1775947198
-GameObject:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  serializedVersion: 6
-  m_Component:
-  - component: {fileID: 1775947200}
-  - component: {fileID: 1775947199}
-  - component: {fileID: 1775947201}
-  m_Layer: 0
-  m_Name: Projection Output
-  m_TagString: Untagged
-  m_Icon: {fileID: 0}
-  m_NavMeshLayer: 0
-  m_StaticEditorFlags: 0
-  m_IsActive: 1
---- !u!114 &1775947199
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1775947198}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 11d3d7ccfa47d7e42a408a71322ed499, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::CityTwin.Calibration.ProjectionOutputRig
-  sourceCamera: {fileID: 96761466282609724}
-  tableResolution: 3840
-  warpShader: {fileID: 4800000, guid: da3763c968171e74fbc822a067a43d72, type: 3}
-  outputLayerName: ProjectionOutput
-  meshResolution: 32
-  defaultSetup: pilot
-  useSavedCalibration: 1
-  projectors: []
-  testPattern: 0
---- !u!4 &1775947200
-Transform:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1775947198}
-  serializedVersion: 2
-  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: -10000, z: 0}
-  m_LocalScale: {x: 1, y: 1, z: 1}
-  m_ConstrainProportionsScale: 0
-  m_Children: []
-  m_Father: {fileID: 0}
-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!114 &1775947201
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1775947198}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 97e0fc391f2ca0b46ac29eb246e75aa9, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::CityTwin.Calibration.ProjectionCalibrationController
-  toggleKey: 102
-  overlayShader: {fileID: 4800000, guid: 44ebe5d802d9ca94da396fcf2a820560, type: 3}
-  projectorTints:
-  - {r: 1, g: 0.35, b: 1, a: 1}
-  - {r: 0.3, g: 0.85, b: 1, a: 1}
-  - {r: 1, g: 0.9, b: 0.3, a: 1}
-  - {r: 0.4, g: 1, b: 0.4, a: 1}
-  mousePickRadiusPx: 40
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
   m_ObjectHideFlags: 0

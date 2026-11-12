@@ -46,7 +46,22 @@ namespace CityTwin.Input
         private readonly Dictionary<int, PendingAdd> _pendingAdd = new Dictionary<int, PendingAdd>();
         private readonly List<int> _promoteScratch = new List<int>();
         private readonly List<int> _dropScratch = new List<int>();
+        // Sessions in the most recent TUIO "alive" message.
+        private readonly HashSet<int> _lastAlive = new HashSet<int>();
+        // A new session this close to a vanished one with the same marker id is the same physical tile.
+        private const float HandoverRawDistance = 0.05f;
+        private int _handoverCount;
         private int _nextLocalId;
+        private int _oscMessageCount;
+
+        /// <summary>TUIO objects currently tracked (live sessions). Debug readout.</summary>
+        public int LiveInputCount => _live.Count;
+        /// <summary>Total /tuio/2Dobj OSC messages received since start. Climbs whenever TUIO data arrives at all (debug readout).</summary>
+        public int OscMessageCount => _oscMessageCount;
+        /// <summary>Most recent raw TUIO position (0..1, as sent by the tracker, before any mapping). Debug readout.</summary>
+        public Vector2 LastRawPosition { get; private set; }
+        /// <summary>The camera mapping used before any camera fit: the camera is assumed to see exactly projector 0's frame. Null without the rig.</summary>
+        public SensorMapping DefaultCameraMapping => RigReady ? DefaultMapping() : null;
 
         // Falls back to the defaults for a sensor that has no saved settings yet.
         private readonly SensorFilterSettings _defaultFilter = new SensorFilterSettings();
@@ -54,6 +69,10 @@ namespace CityTwin.Input
         private BuildingSpawner _spawner;
         private SensorCalibration _sensor;
         private bool _calibrationResolved;
+        // Used until the camera is fitted: assumes the camera sees exactly projector 0's frame.
+        private SensorMapping _defaultMapping;
+        private Vector2[] _defaultMappingTable, _defaultMappingProjector;
+        private bool _defaultMappingLogged;
         private bool _suppressGameInput;
 
         private struct PendingAdd { public float FirstSeen; public Vector2 Pos; public string BuildingId; public int SourceId; }
@@ -131,6 +150,8 @@ namespace CityTwin.Input
             if (_calibrationResolved) return;
             _calibrationResolved = true;
             _sensor = null;
+            _defaultMapping = null;
+            _defaultMappingTable = _defaultMappingProjector = null;
             if (_rig != null)
             {
                 var store = _rig.Store;
@@ -148,12 +169,60 @@ namespace CityTwin.Input
         private SensorFilterSettings CurrentFilterSettings =>
             _rig == null ? null : _sensor != null ? _sensor.filter : _defaultFilter;
 
-        // The table uv of a saved mapping only means something while the table renders through the rig.
-        private bool IsMapped =>
-            _sensor != null && _sensor.IsFitted && ProjectionOutputRig.Active == _rig && _rig != null
-            && _spawner != null && _spawner.ContentRoot != null;
+        // The table uv of a mapping only means something while the table renders through the rig.
+        private bool RigReady =>
+            ProjectionOutputRig.Active == _rig && _rig != null && _spawner != null && _spawner.ContentRoot != null;
 
-        private Vector2 ToFilterSpace(Vector2 raw) => IsMapped ? _sensor.mapping.Map(raw) : raw;
+        private bool HasFittedSensor => _sensor != null && _sensor.IsFitted;
+
+        private bool IsMapped => RigReady && ActiveMapping != null;
+
+        /// <summary>The fitted camera mapping, else the projector-frame default, else null.</summary>
+        private SensorMapping ActiveMapping => HasFittedSensor ? _sensor.mapping : DefaultMapping();
+
+        private Vector2 ToFilterSpace(Vector2 raw) => IsMapped ? ActiveMapping.Map(raw) : raw;
+
+        /// <summary>
+        /// Before any camera fit, assume the camera sees exactly projector 0's frame: raw (0,0) = the frame's top-left,
+        /// raw (1,1) = its bottom-right (raw y is down, projector uv y is up). Rebuilt whenever the projector geometry
+        /// changes (auto fit, projector editor), so pins follow the frame. The camera calibration replaces it.
+        /// </summary>
+        private SensorMapping DefaultMapping()
+        {
+            if (_rig == null || _rig.Projectors == null || _rig.Projectors.Count == 0) return null;
+            var cal = _rig.Projectors[0];
+            if (cal == null || cal.tablePoints == null || cal.projectorPoints == null) return null;
+            if (_defaultMapping != null && SamePoints(cal.tablePoints, _defaultMappingTable)
+                && SamePoints(cal.projectorPoints, _defaultMappingProjector))
+                return _defaultMapping;
+
+            bool rebuilt = _defaultMapping != null;
+            _defaultMapping = null;
+            _defaultMappingTable = (Vector2[])cal.tablePoints.Clone();
+            _defaultMappingProjector = (Vector2[])cal.projectorPoints.Clone();
+            if (!cal.TryGetTableToProjector(out Homography tableToProjector) || !tableToProjector.TryInverse(out Homography projectorToTable))
+                return null;
+
+            // raw (x, y down) -> projector uv (x, 1 - y), then projector uv -> table uv.
+            var rawToProjector = new Homography { m00 = 1, m11 = -1, m12 = 1, m22 = 1 };
+            _defaultMapping = new SensorMapping { homography = (projectorToTable * rawToProjector).Normalized(), k1 = 0 };
+            if (!_defaultMappingLogged)
+            {
+                _defaultMappingLogged = true;
+                Debug.Log("[TileTracking] No camera fit: using the projector frame as the default camera mapping", this);
+            }
+            if (rebuilt)
+                foreach (var live in _live.Values) live.Filter.Reset(); // old filter state is in the previous frame's space
+            return _defaultMapping;
+        }
+
+        private static bool SamePoints(Vector2[] a, Vector2[] b)
+        {
+            if (a == null || b == null || a.Length != b.Length) return false;
+            for (int i = 0; i < a.Length; i++)
+                if (a[i] != b[i]) return false;
+            return true;
+        }
 
         private Vector2 FilterSpaceToPose(Vector2 position)
         {
@@ -203,6 +272,7 @@ namespace CityTwin.Input
 
         private void OnTuio2DObj(OSCMessage msg)
         {
+            _oscMessageCount++; // any /tuio/2Dobj message (set/alive/fseq) = TUIO is reaching us
             if (msg.Values.Count < 1 || msg.Values[0].Type != OSCValueType.String) return;
             string cmd = msg.Values[0].StringValue;
             switch (cmd)
@@ -235,11 +305,20 @@ namespace CityTwin.Input
             ResolveCalibration();
             if (!_live.TryGetValue(sessionId, out var live))
             {
-                live = new LiveSession { FirstSeen = Time.unscaledTime };
-                live.Filter.Settings = CurrentFilterSettings;
-                _live[sessionId] = live;
+                int previous = FindHandover(sessionId, classId, new Vector2(x, y));
+                if (previous >= 0)
+                {
+                    live = Rekey(previous, sessionId);
+                }
+                else
+                {
+                    live = new LiveSession { FirstSeen = Time.unscaledTime };
+                    live.Filter.Settings = CurrentFilterSettings;
+                    _live[sessionId] = live;
+                }
             }
             live.Raw = new Vector2(x, y);
+            LastRawPosition = live.Raw;
             live.ClassId = classId;
             live.BuildingId = buildingId;
             live.SourceId = sourceId;
@@ -282,11 +361,52 @@ namespace CityTwin.Input
             // "alive" lists every currently-present session each frame. Refresh their last-seen time;
             // the grace-based removal and add-confirmation are handled in Update().
             float now = Time.time;
+            _lastAlive.Clear();
             for (int i = 1; i < msg.Values.Count; i++)
             {
-                if (msg.Values[i].Type == OSCValueType.Int)
-                    _lastSeen[msg.Values[i].IntValue] = now;
+                if (msg.Values[i].Type != OSCValueType.Int) continue;
+                _lastSeen[msg.Values[i].IntValue] = now;
+                _lastAlive.Add(msg.Values[i].IntValue);
             }
+        }
+
+        /// <summary>
+        /// reacTIVision sometimes gives a tile that never left the table a new session id (seen every frame on the
+        /// pilot camera). Such a session is matched to a tracked one with the same marker id, close by, that the
+        /// latest "alive" no longer lists, so the game keeps one tile instead of placing a new one per frame.
+        /// </summary>
+        private int FindHandover(int sessionId, int classId, Vector2 raw)
+        {
+            int best = -1;
+            float bestDistance = HandoverRawDistance;
+            foreach (var kv in _live)
+            {
+                if (kv.Key == sessionId || kv.Value.ClassId != classId || _lastAlive.Contains(kv.Key)) continue;
+                float d = Vector2.Distance(kv.Value.Raw, raw);
+                if (d <= bestDistance) { bestDistance = d; best = kv.Key; }
+            }
+            return best;
+        }
+
+        private LiveSession Rekey(int from, int to)
+        {
+            var live = _live[from];
+            _live.Remove(from);
+            _live[to] = live;
+            if (_sessionToTileId.TryGetValue(from, out string tileId))
+            {
+                _sessionToTileId.Remove(from);
+                _sessionToTileId[to] = tileId;
+            }
+            if (_pendingAdd.TryGetValue(from, out var pend))
+            {
+                _pendingAdd.Remove(from);
+                _pendingAdd[to] = pend;
+            }
+            _lastSeen.Remove(from);
+            if (_handoverCount++ == 0)
+                Debug.Log($"[TileTracking] Game {SensorIndex + 1}: the tracker re-issued a session id for a tile on the table; following it as the same tile.", this);
+            return live;
         }
 
         private void Update()

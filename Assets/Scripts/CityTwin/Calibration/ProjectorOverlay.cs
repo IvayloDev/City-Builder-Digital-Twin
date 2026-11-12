@@ -11,7 +11,7 @@ namespace CityTwin.Calibration
     /// </summary>
     public class ProjectorOverlay : MonoBehaviour
     {
-        public enum MarkerKind { TargetPending, TargetCurrent, TargetCaptured, TargetSkipped, LiveTile, AreaSelected, AreaShared }
+        public enum MarkerKind { TargetPending, TargetCurrent, TargetCaptured, TargetSkipped, LiveTile, AreaSelected, AreaShared, TargetStored }
 
         /// <summary>A graphic in this projector's frame.</summary>
         public struct Marker
@@ -184,17 +184,20 @@ namespace CityTwin.Calibration
                 switch (m.Kind)
                 {
                     case MarkerKind.TargetPending:
-                        AddCrosshair(p, 22f, 2f, Pending);
+                        AddCrosshair(p, 14f, 2f, Pending);
                         break;
                     case MarkerKind.TargetCaptured:
-                        AddCrosshair(p, 22f, 2f, Captured);
+                        AddCrosshair(p, 14f, 2f, Captured);
                         break;
                     case MarkerKind.TargetSkipped:
                         AddRect(p, Vector2.one * 5f * _pxToLocal, Skipped);
                         break;
                     case MarkerKind.TargetCurrent:
-                        AddCrosshair(p, 90f, 4f, Selected);
+                        AddCrosshair(p, 36f, 3f, Selected);
                         DrawProgress(p, m.Progress);
+                        break;
+                    case MarkerKind.TargetStored: // current target, stored, waiting for Next
+                        AddCrosshair(p, 36f, 3f, Captured);
                         break;
                     case MarkerKind.LiveTile:
                         AddRect(p, Vector2.one * 11f * _pxToLocal, Outline);
@@ -212,8 +215,9 @@ namespace CityTwin.Calibration
 
         private void DrawProgress(Vector2 center, float progress)
         {
-            float halfWidth = 50f * _pxToLocal, halfHeight = 5f * _pxToLocal;
-            Vector2 c = center + new Vector2(0f, -70f * _pxToLocal);
+            if (progress <= 0f) return;
+            float halfWidth = 24f * _pxToLocal, halfHeight = 3f * _pxToLocal;
+            Vector2 c = center + new Vector2(0f, -34f * _pxToLocal);
             AddRect(c, new Vector2(halfWidth, halfHeight), Outline);
             float fill = halfWidth * Mathf.Clamp01(progress);
             if (fill > 0f) AddRect(c + new Vector2(fill - halfWidth, 0f), new Vector2(fill, halfHeight), Captured);
