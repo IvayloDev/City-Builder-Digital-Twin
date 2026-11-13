@@ -25,6 +25,15 @@ namespace CityTwin.UI
         [Tooltip("Root RectTransform for hit testing (should match BuildingSpawner.ContentRoot / table area).")]
         [SerializeField] private RectTransform tableRoot;
         [SerializeField] private GameObject overlayRoot;
+        [Tooltip("While the start screen shows, these siblings of it are hidden (faded out, still running), so only the start graphics and the map image show: hubs, roads, buildings, top bar.")]
+        [SerializeField] private string[] hideDuringStartScreen =
+        {
+            "Hubs Connector Lines Holder", "Roads Connector Lines Holder", "Buildings Holder", "Hubs Registry",
+            "RootTable", "Top Bar UI", "DebugOverlayText",
+        };
+        private readonly System.Collections.Generic.List<CanvasGroup> _hiddenGroups = new System.Collections.Generic.List<CanvasGroup>();
+        private readonly System.Collections.Generic.List<float> _hiddenAlpha = new System.Collections.Generic.List<float>();
+        private bool _hidingGame;
 
         [Header("OSC → Table Mapping")]
         [Tooltip("If true, treats incoming TilePose.Position as normalized (0..1) and maps it into tableRoot local space using tableRoot.rect.size.")]
@@ -55,6 +64,37 @@ namespace CityTwin.UI
             if (sessionTimer == null) sessionTimer = GetComponentInChildren<SessionTimer>(true) ?? GetComponentInParent<SessionTimer>();
             if (tutorialSequence == null) tutorialSequence = GetComponentInChildren<TutorialSequenceController>(true) ?? GetComponentInParent<TutorialSequenceController>();
             if (inactivityPopup == null) inactivityPopup = GetComponentInChildren<InactivityPopupController>(true) ?? GetComponentInParent<InactivityPopupController>();
+        }
+
+        // Start screen up: only its graphics and the map underneath. Faded, not deactivated, so nothing stops running.
+        private void LateUpdate()
+        {
+            bool hide = overlayRoot != null && overlayRoot.activeInHierarchy;
+            if (hide == _hidingGame && (!hide || _hiddenGroups.Count > 0)) return;
+            _hidingGame = hide;
+            if (hide && _hiddenGroups.Count == 0 && overlayRoot.transform.parent != null)
+            {
+                foreach (Transform sibling in overlayRoot.transform.parent)
+                {
+                    if (System.Array.IndexOf(hideDuringStartScreen, sibling.name) < 0) continue;
+                    var group = sibling.GetComponent<CanvasGroup>();
+                    if (group == null) group = sibling.gameObject.AddComponent<CanvasGroup>();
+                    _hiddenGroups.Add(group);
+                    _hiddenAlpha.Add(group.alpha);
+                }
+            }
+            for (int i = 0; i < _hiddenGroups.Count; i++)
+            {
+                var group = _hiddenGroups[i];
+                if (group == null) continue;
+                if (hide)
+                {
+                    _hiddenAlpha[i] = group.alpha; // their own fades (tutorial, end screen) get back what they had
+                    group.alpha = 0f;
+                }
+                else group.alpha = _hiddenAlpha[i];
+                group.blocksRaycasts = !hide;
+            }
         }
 
         private void OnEnable()
@@ -104,6 +144,13 @@ namespace CityTwin.UI
             if (IsPointInside(buttonRU, tableLocal)) { StartWithLanguage("RU"); return true; }
             if (IsPointInside(buttonKZ, tableLocal)) { StartWithLanguage("KZ"); return true; }
             return false;
+        }
+
+        /// <summary>True when a tile at this TUIO position lies on the target (e.g. the tutorial's SKIP), like the language buttons.</summary>
+        public bool IsTileOver(RectTransform target, Vector2 tuioPosition)
+        {
+            if (target == null || tableRoot == null) return false;
+            return IsPointInside(target, OscToTableLocal(tuioPosition));
         }
 
         private Vector2 OscToTableLocal(Vector2 oscPos)

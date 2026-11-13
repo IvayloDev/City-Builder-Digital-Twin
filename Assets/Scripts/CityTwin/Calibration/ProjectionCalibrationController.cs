@@ -3,6 +3,7 @@ using System.Text;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.InputSystem;
+using UnityEngine.UI;
 
 namespace CityTwin.Calibration
 {
@@ -41,11 +42,6 @@ namespace CityTwin.Calibration
         private const float SeamStep = 1f / 300f;      // 1 cm on the 300 cm table
         private const float SeamStepLarge = 5f / 300f; // 5 cm
 
-        private static readonly TestPattern[] PatternCycle =
-            { TestPattern.Overlay, TestPattern.PatternOnly, TestPattern.White, TestPattern.Black, TestPattern.Off };
-
-        internal static IReadOnlyList<TestPattern> Patterns => PatternCycle;
-
         /// <summary>True while any calibration menu is open: game input must stay out of the way.</summary>
         public static bool AnyOpen { get; private set; }
 
@@ -58,7 +54,15 @@ namespace CityTwin.Calibration
         private readonly List<Vector2> _handleScratch = new List<Vector2>();
         private Font _font;
         private bool _active;
-        private TestPattern _pattern = TestPattern.Overlay;
+        // Calibration shows no game: a grid cut to the play area shape, a coarse grid outside it.
+        private TestPattern _pattern = TestPattern.MaskedGrid;
+        private const string GameMaskImageName = "Main BG"; // the play area art (TableBounds uses the same image)
+        private readonly List<Image> _maskImages = new List<Image>();
+        private float _nextMaskScan;
+        private readonly Vector4[] _maskA = new Vector4[ProjectorOutput.MaxGameMasks];
+        private readonly Vector4[] _maskB = new Vector4[ProjectorOutput.MaxGameMasks];
+        private readonly Vector4[] _maskRect = new Vector4[ProjectorOutput.MaxGameMasks];
+        private readonly Vector3[] _cornerScratch = new Vector3[4];
         private bool _tint;
         private bool _hudVisible = true;
         private bool _hudFlipped;
@@ -159,6 +163,7 @@ namespace CityTwin.Calibration
             HandleKeyboard(kb);
             if (!_active) return; // Enter / Esc may have closed calibration
             if (_cameraTab) _sensorTab.Tick();
+            if (_cameraTab && _sensorTab.IsCapturing) HandleTargetClick();
             if (!_setupPage && !_cameraTab) HandleMouse();
             DrawOverlays();
         }
@@ -175,7 +180,8 @@ namespace CityTwin.Calibration
                 return;
             }
             _active = true;
-            _editor = new ProjectionCalibrationEditor(_rig.Projectors);
+            _editor = new ProjectionCalibrationEditor(_rig.Projectors) { UseCornerProxies = true };
+            _nextMaskScan = 0f;
             _editor.GeometryChanged += OnGeometryChanged;
             AnyOpen = true;
             _sensorTab.Hold();
@@ -269,7 +275,6 @@ namespace CityTwin.Calibration
             }
             if (kb.sKey.wasPressedThisFrame) Save();
 
-            if (kb.pKey.wasPressedThisFrame) { _pattern = NextPattern(_pattern); ApplyPatternAndTint(); }
             if (kb.tKey.wasPressedThisFrame) { _tint = !_tint; ApplyPatternAndTint(); }
             if (kb.hKey.wasPressedThisFrame) _hudVisible = !_hudVisible;
             if (kb.fKey.wasPressedThisFrame) _hudFlipped = !_hudFlipped;
@@ -581,6 +586,16 @@ namespace CityTwin.Calibration
             }
         }
 
+        // Camera capture: click a target on the main window to go to it (retake it, or take one that was skipped).
+        private void HandleTargetClick()
+        {
+            var mouse = Mouse.current;
+            if (mouse == null || !mouse.leftButton.wasPressedThisFrame) return;
+            Vector2 pos = mouse.position.ReadValue();
+            if (_hudVisible && _menu.ContainsWindowPoint(pos)) return;
+            _sensorTab.TryPickTarget(pos, mousePickRadiusPx);
+        }
+
         private int OutputAt(Vector2 screenPos)
         {
             for (int i = 0; i < _rig.Outputs.Count; i++)
@@ -649,6 +664,7 @@ namespace CityTwin.Calibration
             // Camera tab: black out the game so only the targets and the tiles the camera sees are projected.
             var pattern = _cameraTab && !_setupPage ? TestPattern.Black : _pattern;
             if (_rig.Pattern != pattern) _rig.Pattern = pattern;
+            if (pattern == TestPattern.MaskedGrid) UpdateGameMasks();
             string hud = _hudVisible ? BuildHud() : null;
             if (_cameraTab) { DrawCameraTabOverlays(hud); return; }
             for (int i = 0; i < _overlays.Count && i < _rig.Outputs.Count; i++)
@@ -667,6 +683,7 @@ namespace CityTwin.Calibration
                     SelectedHandle = _editor.SelectedHandle,
                     MeshMode = target == CalibrationEditTarget.MeshNodes,
                     MeshColumns = output.Calibration.meshColumns,
+                    OuterPoints = selected && target == CalibrationEditTarget.ControlPoints ? output.Calibration.projectorPoints : null,
                     HudText = selected ? hud : null,
                     HudFlipped = _hudFlipped,
                 });
@@ -697,7 +714,9 @@ namespace CityTwin.Calibration
             var c = output.Calibration;
             if (target == CalibrationEditTarget.ControlPoints)
             {
-                if (c.projectorPoints != null) into.AddRange(c.projectorPoints);
+                // The editor moves the proxies half way in; the real corners are drawn as OuterPoints.
+                if (ProjectionCalibrationEditor.TryGetCornerProxies(c, out var proxies)) into.AddRange(proxies);
+                else if (c.projectorPoints != null) into.AddRange(c.projectorPoints);
                 return;
             }
             if (!c.HasMeshWarp) return;
@@ -712,16 +731,70 @@ namespace CityTwin.Calibration
             if (_sensorTab.Areas.Count > 1) sb.Append(_sensorTab.SelectedArea.Name.ToUpperInvariant()).Append("   ");
             if (_cameraTab)
             {
-                sb.Append(_sensorTab.BannerText());
+                sb.Append(_sensorTab.BannerText().ToUpperInvariant());
             }
-            else
+            if (Status != null)
             {
-                var c = _editor.Current;
-                string what = _editor.Target == CalibrationEditTarget.ControlPoints ? "point" : "node";
-                sb.Append($"PROJECTOR: {c.name}, {what} {_editor.SelectedHandle + 1}/{_editor.HandleCount}");
+                if (sb.Length > 0) sb.Append('\n');
+                sb.Append(Status.ToUpperInvariant());
             }
-            if (Status != null) sb.Append('\n').Append(Status);
-            return sb.ToString();
+            return sb.Length > 0 ? sb.ToString() : null;
+        }
+
+        /// <summary>
+        /// Where each running game's play area art sits on the table, for the masked grid: the fan image's corners in
+        /// table uv give an affine map from table uv to the sprite's texture uv. Rescanned once a second.
+        /// </summary>
+        private void UpdateGameMasks()
+        {
+            if (Time.unscaledTime >= _nextMaskScan)
+            {
+                _nextMaskScan = Time.unscaledTime + 1f;
+                _maskImages.Clear();
+                foreach (var image in FindObjectsByType<Image>(FindObjectsInactive.Exclude, FindObjectsSortMode.None))
+                    if (image.name == GameMaskImageName) _maskImages.Add(image);
+            }
+
+            Texture texture = null;
+            int count = 0;
+            foreach (var image in _maskImages)
+            {
+                if (count >= ProjectorOutput.MaxGameMasks) break;
+                if (image == null || !image.isActiveAndEnabled || image.sprite == null) continue;
+                var sprite = image.sprite;
+                if (texture == null) texture = sprite.texture;
+                else if (sprite.texture != texture) continue; // one mask texture per pass
+
+                image.rectTransform.GetWorldCorners(_cornerScratch); // bottom-left, top-left, top-right, bottom-right
+                if (!_rig.TryWorldToTableUv(_cornerScratch[0], out Vector2 p0)
+                    || !_rig.TryWorldToTableUv(_cornerScratch[3], out Vector2 p1)
+                    || !_rig.TryWorldToTableUv(_cornerScratch[1], out Vector2 p3)) continue;
+                Vector2 e1 = p1 - p0, e2 = p3 - p0;
+
+                if (image.preserveAspect && image.type == Image.Type.Simple)
+                {
+                    // The art is drawn centred at its own aspect inside the rect.
+                    Rect rect = image.rectTransform.rect;
+                    float spriteAspect = sprite.rect.width / Mathf.Max(1f, sprite.rect.height);
+                    float rectAspect = rect.width / Mathf.Max(1e-3f, rect.height);
+                    if (rectAspect > spriteAspect) { float f = spriteAspect / rectAspect; p0 += e1 * (1f - f) * 0.5f; e1 *= f; }
+                    else { float f = rectAspect / spriteAspect; p0 += e2 * (1f - f) * 0.5f; e2 *= f; }
+                }
+
+                float det = e1.x * e2.y - e1.y * e2.x;
+                if (Mathf.Abs(det) < 1e-9f) continue;
+                // Rect uv (s, t) of a table uv: s = (e2.y dx - e2.x dy) / det, t = (e1.x dy - e1.y dx) / det, d = uv - p0.
+                Vector4 outer = UnityEngine.Sprites.DataUtility.GetOuterUV(sprite);
+                float su = outer.z - outer.x, sv = outer.w - outer.y;
+                float sx = e2.y / det, sy = -e2.x / det, tx = -e1.y / det, ty = e1.x / det;
+                _maskA[count] = new Vector4(su * sx, su * sy, outer.x - su * (sx * p0.x + sy * p0.y), 0f);
+                _maskB[count] = new Vector4(sv * tx, sv * ty, outer.y - sv * (tx * p0.x + ty * p0.y), 0f);
+                _maskRect[count] = outer;
+                count++;
+            }
+
+            foreach (var output in _rig.Outputs)
+                if (output != null) output.SetGameMasks(texture, count, _maskA, _maskB, _maskRect);
         }
 
         private Vector2 CurrentOutputPixelSize()
@@ -734,12 +807,6 @@ namespace CityTwin.Calibration
         {
             _status = message;
             _statusUntil = Time.unscaledTime + StatusSeconds;
-        }
-
-        private static TestPattern NextPattern(TestPattern p)
-        {
-            int i = System.Array.IndexOf(PatternCycle, p);
-            return PatternCycle[(i + 1) % PatternCycle.Length];
         }
     }
 }

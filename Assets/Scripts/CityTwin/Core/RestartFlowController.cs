@@ -42,6 +42,9 @@ namespace CityTwin.Core
         [SerializeField] private int countdownSeconds = 3;
 
         private enum FlowState { Idle, WaitingForEmpty, CountingDown }
+
+        /// <summary>The game is over and tiles are still on the table (the "return all tiles" prompt).</summary>
+        public bool IsWaitingForTiles => _state == FlowState.WaitingForEmpty;
         private FlowState _state = FlowState.Idle;
         private Coroutine _countdownRoutine;
         private Coroutine _messageRoutine;

@@ -344,38 +344,38 @@
         "steps": [
             {
                 "textKey": "tutorial.step1",
-                "durationSeconds": 10.0,
+                "durationSeconds": 6.0,
                 "action": "hubSpawn"
             },
             {
                 "textKey": "tutorial.step2",
-                "durationSeconds": 10.0,
+                "durationSeconds": 5.0,
                 "action": "placementGate"
             },
             {
                 "textKey": "tutorial.score",
-                "durationSeconds": 8.0,
+                "durationSeconds": 5.0,
                 "action": "scoreGlow"
             },
             {
                 "textKey": "tutorial.balance",
-                "durationSeconds": 8.0,
+                "durationSeconds": 4.0,
                 "action": "categoryGlow"
             },
             {
                 "textKey": "tutorial.goal",
-                "durationSeconds": 10.0,
+                "durationSeconds": 6.0,
                 "action": "qolDemo"
             },
             {
                 "textKey": "tutorial.go",
-                "durationSeconds": 5.0,
+                "durationSeconds": 3.0,
                 "action": ""
             }
         ],
-        "metricRiseSeconds": 0.9599999785423279,
-        "metricHoldSeconds": 0.30000001192092898,
-        "metricGapSeconds": 0.5
+        "metricRiseSeconds": 0.35,
+        "metricHoldSeconds": 0.15,
+        "metricGapSeconds": 0.1
     },
     "tips": {
         "bandPopupSeconds": 8.0,

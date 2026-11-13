@@ -15,6 +15,8 @@ namespace CityTwin.Calibration
         White = 3,
         /// <summary>Full black: check black level in the overlap.</summary>
         Black = 4,
+        /// <summary>No game: a fine grid cut to the game's play area shape, a coarse grid outside it (calibration default).</summary>
+        MaskedGrid = 5,
     }
 
     /// <summary>
@@ -29,6 +31,34 @@ namespace CityTwin.Calibration
         private static readonly int CircleMaskId = Shader.PropertyToID("_CircleMask");
         private static readonly int PatternModeId = Shader.PropertyToID("_PatternMode");
         private static readonly int TintId = Shader.PropertyToID("_Tint");
+        private static readonly int GameMaskTexId = Shader.PropertyToID("_GameMaskTex");
+        private static readonly int GameMaskCountId = Shader.PropertyToID("_GameMaskCount");
+        private static readonly int GameMaskAId = Shader.PropertyToID("_GameMaskA");
+        private static readonly int GameMaskBId = Shader.PropertyToID("_GameMaskB");
+        private static readonly int GameMaskRectId = Shader.PropertyToID("_GameMaskRect");
+        public const int MaxGameMasks = 4;
+
+        private Texture _gameMaskTexture;
+        private int _gameMaskCount;
+        private readonly Vector4[] _gameMaskA = new Vector4[MaxGameMasks];
+        private readonly Vector4[] _gameMaskB = new Vector4[MaxGameMasks];
+        private readonly Vector4[] _gameMaskRect = new Vector4[MaxGameMasks];
+
+        /// <summary>
+        /// Play area shapes for <see cref="TestPattern.MaskedGrid"/>: one texture (the fan art), and per play area the
+        /// affine table uv -> texture uv rows (a, b) and the sprite's uv rect. Count 0 = grid everywhere.
+        /// </summary>
+        public void SetGameMasks(Texture texture, int count, Vector4[] a, Vector4[] b, Vector4[] rect)
+        {
+            _gameMaskTexture = texture;
+            _gameMaskCount = texture != null ? Mathf.Clamp(count, 0, MaxGameMasks) : 0;
+            for (int i = 0; i < _gameMaskCount; i++)
+            {
+                _gameMaskA[i] = a[i];
+                _gameMaskB[i] = b[i];
+                _gameMaskRect[i] = rect[i];
+            }
+        }
 
         public ProjectorCalibration Calibration { get; private set; }
         public Camera OutputCamera => _camera;
@@ -176,6 +206,11 @@ namespace CityTwin.Calibration
             _material.SetVector(CircleMaskId, new Vector4(0.5f, 0.5f, c.circleMaskRadius, Mathf.Max(0f, c.circleMaskFeather)));
             _material.SetFloat(PatternModeId, (float)Pattern);
             _material.SetColor(TintId, Tint);
+            _material.SetFloat(GameMaskCountId, _gameMaskCount);
+            if (_gameMaskTexture != null) _material.SetTexture(GameMaskTexId, _gameMaskTexture);
+            _material.SetVectorArray(GameMaskAId, _gameMaskA);
+            _material.SetVectorArray(GameMaskBId, _gameMaskB);
+            _material.SetVectorArray(GameMaskRectId, _gameMaskRect);
         }
 
         private void OnDestroy()

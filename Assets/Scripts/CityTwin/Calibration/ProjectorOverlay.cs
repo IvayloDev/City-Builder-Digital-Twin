@@ -26,6 +26,7 @@ namespace CityTwin.Calibration
         {
             public bool IsSelectedProjector;
             public IReadOnlyList<Vector2> Handles;  // projector uv
+            public IReadOnlyList<Vector2> OuterPoints; // corner mode: the real corners the proxy handles move (projector uv)
             public int SelectedHandle;
             public bool MeshMode;
             public int MeshColumns;                 // mesh mode: grid shape for connecting lines
@@ -48,6 +49,7 @@ namespace CityTwin.Calibration
         private static readonly Color32 Captured = new Color32(60, 255, 90, 255);
         private static readonly Color32 Skipped = new Color32(255, 70, 70, 255);
         private static readonly Color32 LiveTile = new Color32(255, 40, 220, 255);
+        private static readonly Color32 OuterLine = new Color32(190, 190, 190, 90);
 
         private ProjectorOutput _output;
         private Transform _root;
@@ -143,6 +145,17 @@ namespace CityTwin.Calibration
         private void DrawControlPoints(State s)
         {
             int n = s.Handles.Count;
+            if (s.OuterPoints != null && s.OuterPoints.Count == n)
+            {
+                // The real corners at the edge of the projection: a dim quad, a small cross each, tied to their proxy.
+                for (int i = 0; i < n; i++)
+                {
+                    Vector2 outer = Local(s.OuterPoints[i]);
+                    AddLine(outer, Local(s.OuterPoints[(i + 1) % n]), 2f * _pxToLocal, OuterLine);
+                    AddLine(outer, Local(s.Handles[i]), 1.5f * _pxToLocal, OuterLine);
+                    AddCrosshair(outer, 20f, 2f, Pending);
+                }
+            }
             for (int i = 0; i < n; i++)
             {
                 // Faint connectors show the corner-pin quad.
@@ -186,8 +199,9 @@ namespace CityTwin.Calibration
                     case MarkerKind.TargetPending:
                         AddCrosshair(p, 14f, 2f, Pending);
                         break;
-                    case MarkerKind.TargetCaptured:
-                        AddCrosshair(p, 14f, 2f, Captured);
+                    case MarkerKind.TargetCaptured: // calibrated: stays marked with a green box for the rest of the capture
+                        AddCrosshair(p, 20f, 2f, Captured);
+                        AddBox(p, 16f, 3f, Captured);
                         break;
                     case MarkerKind.TargetSkipped:
                         AddRect(p, Vector2.one * 5f * _pxToLocal, Skipped);
@@ -198,6 +212,7 @@ namespace CityTwin.Calibration
                         break;
                     case MarkerKind.TargetStored: // current target, stored, waiting for Next
                         AddCrosshair(p, 36f, 3f, Captured);
+                        AddBox(p, 16f, 3f, Captured);
                         break;
                     case MarkerKind.LiveTile:
                         AddRect(p, Vector2.one * 11f * _pxToLocal, Outline);

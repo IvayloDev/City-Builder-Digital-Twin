@@ -47,6 +47,10 @@ namespace CityTwin.Core
         private readonly Dictionary<string, Vector2> _parkedTilePositions = new Dictionary<string, Vector2>();
         // Stand-in pins showing physical tiles that lie on the table while it is locked (not yet counted).
         private readonly Dictionary<string, RectTransform> _parkedPins = new Dictionary<string, RectTransform>();
+        // Tiles put down while the tutorial was talking (table locked after its first tile): they count as soon as the
+        // tutorial ends, wherever they lie, instead of waiting to be moved like the language-select tile.
+        private readonly Dictionary<string, TilePose> _parkedDuringTutorial = new Dictionary<string, TilePose>();
+        private bool _tutorialCompleteHooked;
         private int _overBudgetCounter;
 
         /// <summary>Current budget for this instance. Decremented when placing tiles.</summary>
@@ -120,6 +124,8 @@ namespace CityTwin.Core
 
         private void OnDisable()
         {
+            if (_tutorialCompleteHooked && tutorialSequence != null) tutorialSequence.OnTutorialComplete -= CountTilesPutDownDuringTutorial;
+            _tutorialCompleteHooked = false;
             if (hubConnectionRenderer != null)
                 hubConnectionRenderer.OnRoadGeometryChanged -= HandleRoadGeometryChanged;
             if (configLoader != null)
@@ -215,6 +221,10 @@ namespace CityTwin.Core
         {
             if (string.IsNullOrEmpty(tileId))
                 return false;
+            // A tile lifted while the table was locked: forget where it was parked and drop its stand-in.
+            _parkedTilePositions.Remove(tileId);
+            _parkedDuringTutorial.Remove(tileId);
+            DropParkedPin(tileId);
             bool existed = _oscToEngineTileId.ContainsKey(tileId);
             if (!existed)
                 return false;
@@ -238,6 +248,7 @@ namespace CityTwin.Core
             _oscToEngineTileId.Clear();
             _overBudgetTiles.Clear();
             _parkedTilePositions.Clear();
+            _parkedDuringTutorial.Clear();
             foreach (var pin in _parkedPins.Values) if (pin != null) Destroy(pin.gameObject);
             _parkedPins.Clear();
 
@@ -683,9 +694,22 @@ namespace CityTwin.Core
             // While the tutorial locks the table (start screen, guided steps after the first tile),
             // updates are ignored — but remember where each tile sat, so the language-select tile
             // doesn't instantly turn into a building the moment the placement gate opens.
+            if (TrySkipTutorialWith(pose)) return;
             if (tutorialSequence != null && tutorialSequence.TileEditsBlocked)
             {
+                // Already a building (the tutorial's first tile): it stays where it is until the table opens. Parking
+                // it would add a stand-in pin next to the building on every jitter or drag (a "ghost" pin).
+                if (_oscToEngineTileId.ContainsKey(pose.TileId)) return;
                 _parkedTilePositions[pose.TileId] = pose.Position;
+                if (tutorialSequence.IsRunning)
+                {
+                    _parkedDuringTutorial[pose.TileId] = pose;
+                    if (!_tutorialCompleteHooked)
+                    {
+                        _tutorialCompleteHooked = true;
+                        tutorialSequence.OnTutorialComplete += CountTilesPutDownDuringTutorial;
+                    }
+                }
                 ShowParkedPin(pose);
                 return;
             }
@@ -823,6 +847,51 @@ namespace CityTwin.Core
             buildingSpawner.SetMarkerConnectionState(engineId, state);
         }
 
+        /// <summary>The engine id a tile counts as, if it has become a building.</summary>
+        public bool TryGetEngineId(string tileId, out string engineId)
+        {
+            engineId = null;
+            return !string.IsNullOrEmpty(tileId) && _oscToEngineTileId.TryGetValue(tileId, out engineId);
+        }
+
+        /// <summary>
+        /// The stand-in pin this coordinator shows for a tile lying on the locked table, or null. Simulated tiles
+        /// (mouse tester, palette) reuse it instead of adding a second pin on the same spot.
+        /// </summary>
+        public RectTransform ParkedPinFor(string tileId)
+        {
+            return !string.IsNullOrEmpty(tileId) && _parkedPins.TryGetValue(tileId, out RectTransform pin) && pin != null ? pin : null;
+        }
+
+        /// <summary>
+        /// A tile put on the tutorial's SKIP (inside the play area) skips it, the way a tile on a language button picks
+        /// the language. The tile then lies there uncounted, like the language tile, until it is moved.
+        /// </summary>
+        private bool TrySkipTutorialWith(TilePose pose)
+        {
+            if (tutorialSequence == null || !tutorialSequence.IsRunning || startScreen == null) return false;
+            if (string.IsNullOrEmpty(pose.TileId) || _oscToEngineTileId.ContainsKey(pose.TileId)) return false; // a building slid over it doesn't skip
+            var target = tutorialSequence.SkipTarget;
+            if (target == null || !startScreen.IsTileOver(target, pose.Position)) return false;
+            _parkedDuringTutorial.Remove(pose.TileId);
+            _parkedTilePositions[pose.TileId] = pose.Position;
+            ShowParkedPin(pose);
+            tutorialSequence.SkipTutorial();
+            return true;
+        }
+
+        private void CountTilesPutDownDuringTutorial()
+        {
+            if (_parkedDuringTutorial.Count == 0) return;
+            var poses = new List<TilePose>(_parkedDuringTutorial.Values);
+            _parkedDuringTutorial.Clear();
+            foreach (var pose in poses)
+            {
+                _parkedTilePositions.Remove(pose.TileId); // no need to move it first: it was placed for the game
+                OnTileUpdated(pose);
+            }
+        }
+
         private void ShowParkedPin(TilePose pose)
         {
             if (buildingSpawner == null || string.IsNullOrEmpty(pose.TileId)) return;
@@ -843,6 +912,7 @@ namespace CityTwin.Core
         {
             OnTileActivity?.Invoke();
             _parkedTilePositions.Remove(oscTileId); // lifted off the table: no longer parked
+            _parkedDuringTutorial.Remove(oscTileId);
             DropParkedPin(oscTileId);
             if (simulationEngine == null) return;
             if (_oscToEngineTileId.TryGetValue(oscTileId, out string engineId))

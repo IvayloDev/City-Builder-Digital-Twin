@@ -446,30 +446,36 @@ namespace CityTwin.Tests
         }
 
         [Test]
-        public void SkipAndBack_UpdateProgress()
+        public void SkipBackAndGoTo_KeepCaptures()
         {
             var s = Started(out float t);
-            t = Hold(s, Marker(1, TableToRaw(s.Targets[0])), t);
-            Assert.IsTrue(s.Back(), "Back on a stored target retakes it");
-            Assert.AreEqual(0, s.CurrentIndex);
-            Assert.AreEqual(0, s.CapturedCount);
-            Assert.IsFalse(s.AwaitingNext);
-
-            t = Hold(s, Marker(1, TableToRaw(s.Targets[0])), t);
-            Assert.AreEqual(1, s.CapturedCount, "the tile can recapture a target it was taken back from");
-            s.Next();
+            Vector2 raw0 = TableToRaw(s.Targets[0]);
+            t = Hold(s, Marker(1, raw0), t);
+            Assert.IsTrue(s.Next());
             s.Skip();
             Assert.AreEqual(2, s.CurrentIndex);
             Assert.AreEqual(SensorTargetState.Skipped, s.StateOf(1));
 
-            s.Back();
-            s.Back();
+            Assert.IsTrue(s.Back());
+            Assert.IsTrue(s.Back());
             Assert.AreEqual(0, s.CurrentIndex);
-            Assert.AreEqual(0, s.CapturedCount);
+            Assert.AreEqual(1, s.CapturedCount, "going back keeps the captures");
+            Assert.AreEqual(SensorTargetState.Captured, s.StateOf(0));
             Assert.IsFalse(s.Back());
 
-            Hold(s, Marker(1, TableToRaw(s.Targets[0])), t);
+            // Retake: lift the tile, hold it on the target again; the new capture replaces the old one.
+            t = Hold(s, Empty, t, 0.2f);
+            Vector2 retake = raw0 + new Vector2(0.002f, 0f);
+            t = Hold(s, Marker(2, retake), t);
             Assert.AreEqual(1, s.CapturedCount);
+            Assert.That(Vector2.Distance(s.CapturedRaw(0), retake), Is.LessThan(1e-4f));
+
+            Assert.IsTrue(s.Next());
+            Assert.AreEqual(2, s.CurrentIndex, "Next goes to the next target still without a capture");
+
+            Assert.IsTrue(s.GoTo(1), "a skipped target can be taken after all");
+            Assert.AreEqual(1, s.CurrentIndex);
+            Assert.IsFalse(s.Next(), "it has no capture yet");
         }
 
         [Test]

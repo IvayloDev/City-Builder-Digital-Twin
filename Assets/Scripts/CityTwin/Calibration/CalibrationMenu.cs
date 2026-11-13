@@ -12,17 +12,16 @@ namespace CityTwin.Calibration
     /// </summary>
     internal sealed class CalibrationMenu
     {
-        private const float PanelWidth = 372f;
-        private const float MinPanelWidth = 330f;
+        private const float PanelWidth = 470f;
+        private const float MinPanelWidth = 420f;
         private const float MaxPanelWidth = 900f;
-        private const float TitleBarHeight = 34f;
+        private const float TitleBarHeight = 52f;
         private const float EdgeGrab = 7f;
         private const float CornerGrab = 16f;
-        private const string PrefsPrefix = "CityTwin.CalibrationMenu.";
+        private const string PrefsPrefix = "CityTwin.CalibrationMenu.v2."; // v2: bigger redesign, old placement dropped
         private const float Margin = 14f;
-        private const float RowHeight = 26f;
-        private const float TabHeight = 30f;
-        private const float StatusHeight = 30f;
+        private const float RowHeight = 46f;
+        private const float TabHeight = 50f;
         private const float PanelPaddingX = 20f;
         private const float PanelPaddingY = 16f;
         private const float ScrollbarGutter = 18f;
@@ -65,8 +64,7 @@ namespace CityTwin.Calibration
         private int _resizeX, _resizeY; // both 0 = moving
         private Vector2 _pressMouse;
         private Rect _pressRect;
-        private float _stepPx = 1f;
-        private Action _pending;
+                private Action _pending;
 
         public CalibrationMenu(ProjectionCalibrationController controller, ProjectionOutputRig rig, SensorCalibrationTab sensors)
         {
@@ -197,8 +195,8 @@ namespace CityTwin.Calibration
             GUI.matrix = previousMatrix;
         }
 
-        private const float CompactWidth = 560f;
-        private const float CompactButtonHeight = 40f;
+        private const float CompactWidth = 700f;
+        private const float CompactButtonHeight = 56f;
         // Kept well inside the window: a projector can crop the outer edge of its image.
         private const float CompactInset = 0.07f;
 
@@ -207,25 +205,26 @@ namespace CityTwin.Calibration
         {
             var session = _sensors.Session;
             float screenW = Screen.width / Scale, screenH = Screen.height / Scale;
-            float height = CompactButtonHeight + 16f;
-            var area = new Rect((screenW - CompactWidth) * 0.5f, screenH * (1f - CompactInset) - height, CompactWidth, height);
+            float width = Mathf.Min(CompactWidth, screenW - Margin * 2f);
+            float height = CompactButtonHeight + 20f;
+            var area = new Rect((screenW - width) * 0.5f, screenH * (1f - CompactInset) - height, width, height);
             GUILayout.BeginArea(area, _panel);
             GUILayout.BeginHorizontal();
             var tall = GUILayout.Height(CompactButtonHeight);
             if (session.IsClearingTable)
             {
-                GUILayout.Label("Clear the table", _label, tall);
+                GUILayout.Label("CLEAR THE TABLE", _label, tall);
             }
             else
             {
                 int shown = Mathf.Min(session.CurrentIndex + 1, session.Targets.Count);
-                GUILayout.Label($"{shown}/{session.Targets.Count}", _label, GUILayout.Width(44f), tall);
-                if (GUILayout.Button("Back", _button, tall, GUILayout.Width(110f))) Later(() => _sensors.BackTarget());
-                if (GUILayout.Button("Next", session.AwaitingNext ? _primary : _button, tall, GUILayout.Width(130f))) Later(() => _sensors.NextTarget());
-                if (GUILayout.Button("Skip", _button, tall)) Later(() => _sensors.SkipTarget());
+                GUILayout.Label($"{shown}/{session.Targets.Count}", _label, GUILayout.Width(64f), tall);
+                if (GUILayout.Button("BACK", _button, tall)) Later(() => _sensors.BackTarget());
+                if (GUILayout.Button("NEXT", session.AwaitingNext ? _primary : _button, tall)) Later(() => _sensors.NextTarget());
+                if (GUILayout.Button("SKIP", _button, tall)) Later(() => _sensors.SkipTarget());
             }
-            if (GUILayout.Button("Restart", _button, tall)) Later(() => _sensors.RequestRecapture());
-            if (GUILayout.Button("Menu", _button, tall)) Later(() => _sensors.ShowVerify());
+            if (GUILayout.Button("RESTART", _button, tall)) Later(() => _sensors.RequestRecapture());
+            if (GUILayout.Button("MENU", _button, tall)) Later(() => _sensors.ShowVerify());
             GUILayout.EndHorizontal();
             GUILayout.EndArea();
         }
@@ -237,7 +236,7 @@ namespace CityTwin.Calibration
             float scale = Scale;
             var previousMatrix = GUI.matrix;
             GUI.matrix = Matrix4x4.Scale(new Vector3(scale, scale, 1f));
-            if (GUI.Button(new Rect(Margin, Margin, 150f, RowHeight), "Show menu  (H)", _button)) _controller.TextVisible = true;
+            if (GUI.Button(new Rect(Margin, Margin, 200f, RowHeight), "MENU  (H)", _button)) _controller.TextVisible = true;
             GUI.matrix = previousMatrix;
         }
 
@@ -361,7 +360,7 @@ namespace CityTwin.Calibration
             // Title bar: a block of dots that reads as "hold here".
             for (int column = 0; column < 2; column++)
                 for (int row = 0; row < 3; row++)
-                    DrawRect(new Rect(panel.x + 10f + column * 4f, panel.y + 13f + row * 4f, 2f, 2f), Muted);
+                    DrawRect(new Rect(panel.x + 12f + column * 5f, panel.y + TitleBarHeight * 0.5f - 6f + row * 5f, 3f, 3f), Muted);
 
             // Resize corner: a triangle of dots.
             for (int row = 0; row < 3; row++)
@@ -374,15 +373,6 @@ namespace CityTwin.Calibration
             if (x > 0) DrawRect(new Rect(panel.xMax - 2f, panel.yMin, 2f, panel.height), Accent);
             if (y < 0) DrawRect(new Rect(panel.xMin, panel.yMin, panel.width, 2f), Accent);
             if (y > 0) DrawRect(new Rect(panel.xMin, panel.yMax - 2f, panel.width, 2f), Accent);
-        }
-
-        private void FitToContent()
-        {
-            _placed = false;
-            _width = PanelWidth;
-            _userHeight = 0f;
-            _scroll = Vector2.zero;
-            SavePlacement();
         }
 
         private void LoadPlacement()
@@ -405,37 +395,40 @@ namespace CityTwin.Calibration
         }
 
         // ---------- sections ----------
+        // Minimal, all caps, big type: readable on a 860x1080 window and on the projected image.
+
+        private static string Caps(string text) => string.IsNullOrEmpty(text) ? text : text.ToUpperInvariant();
 
         private void DrawHeader()
         {
-            GUILayout.BeginHorizontal();
-            GUILayout.Space(12f); // the drag dots
-            GUILayout.Label("Calibration", _title);
-            GUILayout.Space(8f);
+            GUILayout.BeginHorizontal(GUILayout.Height(TitleBarHeight));
+            GUILayout.Space(16f); // the drag dots
+            GUILayout.Label("CALIBRATION", _title, GUILayout.Height(TitleBarHeight));
+            GUILayout.Space(10f);
             var previous = GUI.contentColor;
             GUI.contentColor = _controller.HasUnsavedChanges ? Warning : Good;
-            GUILayout.Label(_controller.HasUnsavedChanges ? "Unsaved" : "Saved", _mutedLine);
+            GUILayout.Label(_controller.HasUnsavedChanges ? "UNSAVED" : "SAVED", _mutedLine, GUILayout.Height(TitleBarHeight));
             GUI.contentColor = previous;
             GUILayout.FlexibleSpace();
-            if (GUILayout.Button("A-", _button, GUILayout.Width(30f), GUILayout.Height(24f))) Later(() => _sizeFactor = Mathf.Max(0.6f, _sizeFactor - 0.1f));
-            if (GUILayout.Button("A+", _button, GUILayout.Width(30f), GUILayout.Height(24f))) Later(() => _sizeFactor = Mathf.Min(2f, _sizeFactor + 0.1f));
-            if (GUILayout.Button("Fit", _button, GUILayout.Width(32f), GUILayout.Height(24f))) Later(FitToContent);
-            if (GUILayout.Button("Hide", _button, GUILayout.Width(44f), GUILayout.Height(24f))) Later(() => _controller.TextVisible = false);
+            var small = GUILayout.Height(TitleBarHeight - 10f);
+            if (GUILayout.Button("A-", _button, GUILayout.Width(44f), small)) Later(() => _sizeFactor = Mathf.Max(0.6f, _sizeFactor - 0.1f));
+            if (GUILayout.Button("A+", _button, GUILayout.Width(44f), small)) Later(() => _sizeFactor = Mathf.Min(2f, _sizeFactor + 0.1f));
+            if (GUILayout.Button("HIDE", _button, GUILayout.Width(76f), small)) Later(() => _controller.TextVisible = false);
             GUILayout.EndHorizontal();
-            GUILayout.Space(2f);
+            GUILayout.Space(6f);
         }
 
         private void DrawTabs()
         {
             GUILayout.BeginHorizontal();
-            if (GUILayout.Button("1  Projector", TabStyle(!_controller.CameraTabOpen && !_controller.SetupTabOpen), GUILayout.Height(TabHeight)))
+            if (GUILayout.Button("PROJECTOR", TabStyle(!_controller.CameraTabOpen && !_controller.SetupTabOpen), GUILayout.Height(TabHeight)))
                 Later(_controller.ShowProjectorTab);
-            if (GUILayout.Button("2  Camera", TabStyle(_controller.CameraTabOpen && !_controller.SetupTabOpen), GUILayout.Height(TabHeight)))
+            if (GUILayout.Button("CAMERA", TabStyle(_controller.CameraTabOpen && !_controller.SetupTabOpen), GUILayout.Height(TabHeight)))
                 Later(_controller.ShowCameraTab);
-            if (GUILayout.Button("Table setup", TabStyle(_controller.SetupTabOpen), GUILayout.Height(TabHeight)))
+            if (GUILayout.Button("SETUP", TabStyle(_controller.SetupTabOpen), GUILayout.Height(TabHeight)))
                 Later(_controller.ToggleSetupTab);
             GUILayout.EndHorizontal();
-            GUILayout.Space(4f);
+            GUILayout.Space(8f);
             if (!_controller.SetupTabOpen) DrawAreaSwitcher();
         }
 
@@ -444,11 +437,11 @@ namespace CityTwin.Calibration
             var areas = _sensors.Areas;
             if (areas.Count < 2) return;
             GUILayout.BeginHorizontal();
-            if (GUILayout.Button("<", _button, GUILayout.Width(44f), GUILayout.Height(RowHeight))) Later(() => _controller.StepPlayArea(-1));
-            GUILayout.Label($"{_sensors.SelectedArea.Name}   {_sensors.SelectedIndex + 1} of {areas.Count}", _areaLabel, GUILayout.ExpandWidth(true), GUILayout.Height(RowHeight));
-            if (GUILayout.Button(">", _button, GUILayout.Width(44f), GUILayout.Height(RowHeight))) Later(() => _controller.StepPlayArea(1));
+            if (GUILayout.Button("<", _button, GUILayout.Width(RowHeight), GUILayout.Height(RowHeight))) Later(() => _controller.StepPlayArea(-1));
+            GUILayout.Label(Caps(_sensors.SelectedArea.Name), _areaLabel, GUILayout.ExpandWidth(true), GUILayout.Height(RowHeight));
+            if (GUILayout.Button(">", _button, GUILayout.Width(RowHeight), GUILayout.Height(RowHeight))) Later(() => _controller.StepPlayArea(1));
             GUILayout.EndHorizontal();
-            GUILayout.Space(4f);
+            GUILayout.Space(8f);
         }
 
         private GUIStyle TabStyle(bool active) => active ? _tabActive : _tab;
@@ -456,287 +449,136 @@ namespace CityTwin.Calibration
         private void DrawProjectorTab()
         {
             var editor = _controller.Editor;
-            BeginCard("Projector");
             if (editor.ProjectorCount > 1 && !_sensors.AreasReachProjectors(editor.ProjectorCount))
             {
+                BeginCard("PROJECTOR");
                 GUILayout.BeginHorizontal();
                 for (int i = 0; i < editor.ProjectorCount; i++)
                 {
                     int index = i;
-                    if (GUILayout.Button(editor.Projectors[i].name, Choice(i == editor.SelectedProjector), GUILayout.Height(RowHeight))) Later(() => editor.SelectProjector(index));
+                    if (GUILayout.Button(Caps(editor.Projectors[i].name), Choice(i == editor.SelectedProjector), GUILayout.Height(RowHeight))) Later(() => editor.SelectProjector(index));
                 }
                 GUILayout.EndHorizontal();
+                EndCard();
             }
-            else if (editor.Current != null)
-            {
-                GUILayout.Label(editor.Current.name, _label);
-            }
-            string shared = _sensors.SharedText(editor.SelectedProjector);
-            if (shared != null) GUILayout.Label(shared, _muted);
-            EndCard();
 
-            BeginCard("Adjust the picture");
             bool mesh = editor.Target == CalibrationEditTarget.MeshNodes;
+            BeginCard(mesh ? "MESH" : "CORNERS");
             GUILayout.BeginHorizontal();
-            if (GUILayout.Button("Corner points", Choice(!mesh), GUILayout.Height(RowHeight)) && mesh) Later(() => editor.ToggleMeshMode());
-            if (GUILayout.Button("Fine mesh", Choice(mesh), GUILayout.Height(RowHeight)) && !mesh) Later(() => editor.ToggleMeshMode());
+            if (GUILayout.Button("CORNERS", Choice(!mesh), GUILayout.Height(RowHeight)) && mesh) Later(() => editor.ToggleMeshMode());
+            if (GUILayout.Button("MESH", Choice(mesh), GUILayout.Height(RowHeight)) && !mesh) Later(() => editor.ToggleMeshMode());
             GUILayout.EndHorizontal();
-
+            GUILayout.Label(mesh ? "CLICK A NODE · DRAG OR ARROWS" : "CLICK AN INNER POINT · DRAG OR ARROWS", _muted);
+            GUILayout.Label("SHIFT ×10 · ALT FINE · SPACE NEXT POINT", _muted);
+            GUILayout.Space(4f);
             GUILayout.BeginHorizontal();
-            if (GUILayout.Button("<", _button, GUILayout.Width(44f), GUILayout.Height(RowHeight))) Later(() => editor.NextHandle(-1));
-            GUILayout.Label($"{(mesh ? "Node" : "Point")} {editor.SelectedHandle + 1} of {editor.HandleCount}", _labelLine, GUILayout.ExpandWidth(true), GUILayout.Height(RowHeight));
-            if (GUILayout.Button(">", _button, GUILayout.Width(44f), GUILayout.Height(RowHeight))) Later(() => editor.NextHandle(1));
+            if (GUILayout.Button("RESET POINT", _button, GUILayout.Height(RowHeight))) Later(() => editor.ResetSelected());
+            if (GUILayout.Button("UNDO", _button, GUILayout.Height(RowHeight))) Later(() => { if (!editor.Undo()) _controller.SetStatus("Nothing to undo"); });
+            if (mesh && GUILayout.Button("FLATTEN", _button, GUILayout.Height(RowHeight))) Later(_controller.FlattenMesh);
             GUILayout.EndHorizontal();
-
-            DrawMovePad();
-
-            GUILayout.BeginHorizontal();
-            if (GUILayout.Button("Reset point", _button, GUILayout.Height(RowHeight))) Later(() => editor.ResetSelected());
-            if (GUILayout.Button("Undo", _button, GUILayout.Height(RowHeight))) Later(() => { if (!editor.Undo()) _controller.SetStatus("Nothing to undo"); });
-            if (GUILayout.Button("Flatten mesh", _button, GUILayout.Height(RowHeight))) Later(_controller.FlattenMesh);
-            GUILayout.EndHorizontal();
-
-            GUILayout.BeginHorizontal();
-            if (GUILayout.Button("Reset projector to default", _danger, GUILayout.Height(RowHeight))) Later(_controller.ResetProjector);
-            if (editor.ProjectorCount > 1 && GUILayout.Button("Reset all", _danger, GUILayout.Height(RowHeight))) Later(_controller.ResetAll);
-            GUILayout.EndHorizontal();
+            if (GUILayout.Button(editor.ProjectorCount > 1 ? "RESET THIS PROJECTOR" : "RESET PROJECTOR", _danger, GUILayout.Height(RowHeight))) Later(_controller.ResetProjector);
+            if (editor.ProjectorCount > 1 && GUILayout.Button("RESET ALL", _danger, GUILayout.Height(RowHeight))) Later(_controller.ResetAll);
             EndCard();
 
             if (editor.ProjectorCount > 1)
             {
                 var current = editor.Current;
-                BeginCard("Seam between projectors");
+                BeginCard("SEAM");
                 bool seamOn = current != null && current.seamEnabled;
-                if (GUILayout.Toggle(seamOn, seamOn ? "  Seam cut on" : "  Seam cut off", _button, GUILayout.Height(RowHeight)) != seamOn) editor.ToggleSeam();
+                if (GUILayout.Toggle(seamOn, seamOn ? "SEAM CUT ON" : "SEAM CUT OFF", Choice(seamOn), GUILayout.Height(RowHeight)) != seamOn) editor.ToggleSeam();
                 float shiftCm = editor.SeamShift * CmPerUv, max = ProjectionCalibrationEditor.MaxSeamShift * CmPerUv;
-                float next = Slider("Position", shiftCm, -max, max, "{0:+0.0;-0.0;0.0} cm");
+                float next = Slider("POSITION", shiftCm, -max, max, "{0:+0.0;-0.0;0.0} CM");
                 if (!Mathf.Approximately(next, shiftCm)) editor.MoveSeam((next - shiftCm) / CmPerUv);
                 EndCard();
             }
-
-            DrawDisplayCard();
-
-            BeginCard("Cameras");
-            foreach (var area in _sensors.Areas)
-                AreaStatusLine(area);
-            if (_sensors.Areas.Count == 0) GUILayout.Label("No game running", _label);
-            EndCard();
         }
 
-        private void AreaStatusLine(PlayArea area)
-        {
-            var previous = GUI.contentColor;
-            if (_sensors.NeedsCheck(area.Sensor)) GUI.contentColor = Warning;
-            GUILayout.Label($"{area.Name}: {_sensors.FitSummary(area.Sensor)}", _muted);
-            GUI.contentColor = previous;
-        }
-
-        private void DrawMovePad()
-        {
-            GUILayout.BeginHorizontal();
-            GUILayout.Label("Step", _mutedLine, GUILayout.Width(36f), GUILayout.Height(RowHeight));
-            foreach (float step in new[] { 0.2f, 1f, 10f })
-                if (GUILayout.Button($"{step:0.#} px", Choice(Mathf.Approximately(_stepPx, step)), GUILayout.Height(RowHeight))) Later(() => _stepPx = step);
-            GUILayout.EndHorizontal();
-
-            GUILayout.BeginHorizontal();
-            GUILayout.FlexibleSpace();
-            if (GUILayout.RepeatButton("Up", _button, GUILayout.Width(62f), GUILayout.Height(RowHeight))) _controller.NudgeHeld(Vector2.up * _stepPx);
-            GUILayout.FlexibleSpace();
-            GUILayout.EndHorizontal();
-            GUILayout.BeginHorizontal();
-            GUILayout.FlexibleSpace();
-            if (GUILayout.RepeatButton("Left", _button, GUILayout.Width(62f), GUILayout.Height(RowHeight))) _controller.NudgeHeld(Vector2.left * _stepPx);
-            if (GUILayout.RepeatButton("Down", _button, GUILayout.Width(62f), GUILayout.Height(RowHeight))) _controller.NudgeHeld(Vector2.down * _stepPx);
-            if (GUILayout.RepeatButton("Right", _button, GUILayout.Width(62f), GUILayout.Height(RowHeight))) _controller.NudgeHeld(Vector2.right * _stepPx);
-            GUILayout.FlexibleSpace();
-            GUILayout.EndHorizontal();
-        }
-
+        // During a capture the panel gives way to the compact bar (DrawCompactCapture), so this is the camera's summary.
         private void DrawCameraTab()
         {
             var cameras = _sensors.Sensors;
             if (cameras.Count == 0)
             {
-                GUILayout.Label("No game is running, so there is no camera to calibrate.", _label);
+                GUILayout.Label("NO GAME RUNNING · NO CAMERA", _label);
                 return;
-            }
-            if (_controller.Editor.IsDirty)
-            {
-                var previous = GUI.contentColor;
-                GUI.contentColor = Warning;
-                GUILayout.Label("Projector edits are unsaved. Targets show through the current picture, so save those first.", _muted);
-                GUI.contentColor = previous;
             }
 
             var sensor = cameras[Mathf.Clamp(_sensors.SelectedIndex, 0, cameras.Count - 1)];
-            BeginCard($"Camera for play area {sensor.SensorIndex + 1}");
-            GUILayout.Label($"Port {sensor.ListenPort}: {_sensors.FitSummary(sensor)}", _muted);
-
-            GUILayout.BeginHorizontal();
-            if (GUILayout.Button("Capture", Choice(_sensors.IsCapturing), GUILayout.Height(RowHeight)) && !_sensors.IsCapturing) Later(() => _sensors.ShowCapture());
-            if (GUILayout.Button("Verify", Choice(!_sensors.IsCapturing), GUILayout.Height(RowHeight))) Later(() => _sensors.ShowVerify());
-            GUILayout.EndHorizontal();
-            EndCard();
-
-            if (_sensors.IsCapturing) DrawCaptureCard();
-            else DrawVerifyCard();
-
-            DrawTilesCard();
-            DrawFilterCard();
-            DrawDisplayCard();
-        }
-
-        private void DrawCaptureCard()
-        {
-            var session = _sensors.Session;
-            if (session.IsClearingTable)
-            {
-                BeginCard("Waiting for an empty table");
-                GUILayout.Label("Remove all tiles from the table. The first target appears once it has been empty for a moment.", _label);
-                GUILayout.Label(_sensors.TileCount > 0 ? $"{_sensors.TileCount} tile(s) still seen" : $"Empty {session.ClearProgress * 100f:0}%", _muted);
-                ProgressBar(session.ClearProgress);
-                if (GUILayout.Button("Start again", _button, GUILayout.Height(RowHeight))) Later(() => _sensors.RequestRecapture());
-                EndCard();
-                return;
-            }
-
-            int shown = Mathf.Min(session.CurrentIndex + 1, session.Targets.Count);
-            BeginCard($"Target {shown} of {session.Targets.Count}");
-            if (session.AwaitingNext)
-            {
-                GUILayout.Label("Stored. Press Next, then move the tile to the next cross.", _label);
-                GUILayout.Label($"({session.CapturedCount} captured)", _muted);
-                ProgressBar(1f);
-            }
-            else
-            {
-                GUILayout.Label("Put any tile on the yellow cross and let go.", _label);
-                GUILayout.Label((session.HasMarker ? $"Hold still {session.Progress * 100f:0}%" : "No tile seen yet") + $"   ({session.CapturedCount} captured)", _muted);
-                ProgressBar(session.Progress);
-            }
-            if (session.HasFit)
-                GUILayout.Label($"Fit so far: avg error {session.Report.RmsError * CmPerUv:0.0} cm, worst {session.Report.MaxError * CmPerUv:0.0} cm", _muted);
-            GUILayout.BeginHorizontal();
-            if (GUILayout.Button("Next (Enter)", session.AwaitingNext ? _primary : _button, GUILayout.Height(RowHeight))) Later(() => _sensors.NextTarget());
-            if (GUILayout.Button("Capture now (Space)", session.AwaitingNext ? _button : _primary, GUILayout.Height(RowHeight))) Later(() => _sensors.CaptureNow());
-            GUILayout.EndHorizontal();
-            GUILayout.BeginHorizontal();
-            if (GUILayout.Button("Back (Backspace)", _button, GUILayout.Height(RowHeight))) Later(() => _sensors.BackTarget());
-            if (GUILayout.Button("Skip (X)", _button, GUILayout.Height(RowHeight))) Later(() => _sensors.SkipTarget());
-            GUILayout.EndHorizontal();
-            if (GUILayout.Button("Start again", _button, GUILayout.Height(RowHeight))) Later(() => _sensors.RequestRecapture());
-            EndCard();
-        }
-
-        private void DrawVerifyCard()
-        {
-            BeginCard("Check the fit");
+            BeginCard($"CAMERA {sensor.SensorIndex + 1}");
             if (_sensors.IsFitted)
             {
                 var saved = _sensors.Saved;
-                GUILayout.Label("Slide a tile around. The pink square should stay under it.", _label);
-                GUILayout.Label($"{saved.pointCount} points, avg error {saved.rmsError * CmPerUv:0.0} cm, lens {saved.mapping.k1:0.000}", _muted);
-                if (saved.projectorMovedSinceFit)
-                {
-                    var previous = GUI.contentColor;
-                    GUI.contentColor = Warning;
-                    GUILayout.Label("The projector moved after this fit. Check it, then keep it or capture again.", _muted);
-                    GUI.contentColor = previous;
-                    if (GUILayout.Button("Still lines up", _button, GUILayout.Height(RowHeight))) Later(() => _sensors.MarkStillAligned());
-                }
+                GUILayout.Label("CALIBRATED", _label);
+                GUILayout.Label($"{saved.pointCount} POINTS · ERROR {saved.rmsError * CmPerUv:0.0} CM", _muted);
             }
             else
             {
-                GUILayout.Label("This camera has no fit yet, so tiles assume the camera sees exactly the projected frame.", _label);
+                GUILayout.Label("NOT CALIBRATED", _label);
             }
+            Warn(_controller.Editor.IsDirty ? "SAVE THE PROJECTOR FIRST" : null);
+            if (_sensors.IsFitted && _sensors.Saved.projectorMovedSinceFit)
+            {
+                Warn("PROJECTOR MOVED SINCE THIS FIT");
+                if (GUILayout.Button("STILL LINES UP", _button, GUILayout.Height(RowHeight))) Later(() => _sensors.MarkStillAligned());
+            }
+            GUILayout.Space(4f);
             GUILayout.BeginHorizontal();
-            if (GUILayout.Button(_sensors.IsFitted ? "Capture again" : "Start capture", _primary, GUILayout.Height(RowHeight))) Later(() => _sensors.StartCapture());
-            if (_sensors.IsFitted && GUILayout.Button("Clear fit", _danger, GUILayout.Height(RowHeight))) Later(() => _sensors.RequestClearFit());
+            if (GUILayout.Button(_sensors.IsFitted ? "CALIBRATE AGAIN" : "CALIBRATE", _primary, GUILayout.Height(RowHeight))) Later(() => _sensors.StartCapture());
+            if (_sensors.IsFitted && GUILayout.Button("CLEAR", _danger, GUILayout.Height(RowHeight))) Later(() => _sensors.RequestClearFit());
             GUILayout.EndHorizontal();
             EndCard();
         }
 
-        private void DrawTilesCard()
+        private void Warn(string text)
         {
-            BeginCard("Tiles on the table");
-            GUILayout.Label(_sensors.TileListText(), _label);
-            EndCard();
+            if (string.IsNullOrEmpty(text)) return;
+            var previous = GUI.contentColor;
+            GUI.contentColor = Warning;
+            GUILayout.Label(text, _muted);
+            GUI.contentColor = previous;
         }
 
         private void DrawFilterCard()
         {
             var filter = _sensors.Filter;
-            BeginCard("Jitter filter");
-            bool on = GUILayout.Toggle(filter.enabled, filter.enabled ? "  Filter on" : "  Filter off", Choice(filter.enabled), GUILayout.Height(RowHeight));
+            BeginCard("JITTER FILTER");
+            bool on = GUILayout.Toggle(filter.enabled, filter.enabled ? "FILTER ON" : "FILTER OFF", Choice(filter.enabled), GUILayout.Height(RowHeight));
             if (on != filter.enabled) _sensors.SetFilterEnabled(on);
 
-            float radius = Slider("Ignore movement under", filter.radiusCm, 0f, SensorFilterSettings.MaxRadiusCm, "{0:0.0} cm");
+            float radius = Slider("DEAD ZONE", filter.radiusCm, 0f, SensorFilterSettings.MaxRadiusCm, "{0:0.0} CM");
             if (!Mathf.Approximately(radius, filter.radiusCm)) _sensors.SetRadius(radius);
-            float smoothing = Slider("Smoothing when it moves", filter.smoothingSeconds, 0f, SensorFilterSettings.MaxSmoothingSeconds, "{0:0.00} s");
+            float smoothing = Slider("SMOOTHING", filter.smoothingSeconds, 0f, SensorFilterSettings.MaxSmoothingSeconds, "{0:0.00} S");
             if (!Mathf.Approximately(smoothing, filter.smoothingSeconds)) _sensors.SetSmoothing(smoothing);
 
-            GUILayout.Label(_sensors.HasJitterReading ? $"Measured jitter: {_sensors.JitterCm:0.00} cm" : "Measured jitter: leave a tile still to measure", _muted);
-            if (GUILayout.Button("Set radius from measured jitter", _button, GUILayout.Height(RowHeight))) Later(() => _sensors.SetRadiusFromJitter());
-            EndCard();
-        }
-
-        private void DrawDisplayCard()
-        {
-            BeginCard("Test pattern");
             GUILayout.BeginHorizontal();
-            foreach (var pattern in ProjectionCalibrationController.Patterns)
-                if (GUILayout.Button(PatternName(pattern), Choice(_controller.Pattern == pattern), GUILayout.Height(RowHeight))) Later(() => _controller.Pattern = pattern);
-            bool tint = GUILayout.Toggle(_controller.Tint, "Tint", Choice(_controller.Tint), GUILayout.Height(RowHeight));
-            if (tint != _controller.Tint) _controller.Tint = tint;
+            GUILayout.Label(_sensors.HasJitterReading ? $"JITTER {_sensors.JitterCm:0.00} CM" : "JITTER · LEAVE A TILE STILL", _mutedLine, GUILayout.Height(RowHeight));
+            if (GUILayout.Button("AUTO", _button, GUILayout.Width(100f), GUILayout.Height(RowHeight))) Later(() => _sensors.SetRadiusFromJitter());
             GUILayout.EndHorizontal();
             EndCard();
-        }
-
-        private static string PatternName(TestPattern pattern)
-        {
-            switch (pattern)
-            {
-                case TestPattern.Overlay: return "Game+";
-                case TestPattern.PatternOnly: return "Grid";
-                case TestPattern.White: return "White";
-                case TestPattern.Black: return "Black";
-                default: return "Off";
-            }
         }
 
         private void DrawSetupTab()
         {
-            GUILayout.Label("Each setup keeps its own calibration. Switching restarts the game.", _muted);
-            GUILayout.Space(6f);
+            BeginCard("TABLE");
             foreach (var setup in TableSetups.All)
             {
                 bool active = setup == _rig.ActiveSetup;
-                BeginCard(setup.DisplayName);
-                GUILayout.Label(setup.Description, _muted);
-                GUI.enabled = !active;
-                if (GUILayout.Button(active ? "In use" : "Switch to this setup", active ? _buttonActive : _primary, GUILayout.Height(RowHeight))) Later(() => _controller.ChooseSetup(setup));
-                GUI.enabled = true;
-                EndCard();
+                if (GUILayout.Button(Caps(setup.DisplayName), active ? _buttonActive : _button, GUILayout.Height(RowHeight)) && !active)
+                    Later(() => _controller.ChooseSetup(setup));
             }
-            GUILayout.Label($"Started as: {_rig.SetupSource}", _muted);
+            GUILayout.Label("SWITCHING RESTARTS THE GAME", _muted);
+            EndCard();
+
+            if (_sensors.Sensors.Count > 0) DrawFilterCard();
         }
 
         private void DrawFooter()
         {
-            GUILayout.Space(2f);
-            // Fixed height: a message appearing must not move the buttons under the mouse.
-            var previous = GUI.contentColor;
-            GUI.contentColor = Warning;
-            GUILayout.Label(_controller.Status ?? string.Empty, _muted, GUILayout.Height(StatusHeight));
-            GUI.contentColor = previous;
+            GUILayout.Space(4f);
             GUILayout.BeginHorizontal();
-            if (GUILayout.Button("Save", _button, GUILayout.Height(RowHeight))) Later(() => _controller.Save());
-            if (GUILayout.Button("Save and close", _primary, GUILayout.Height(RowHeight))) Later(() => _controller.SaveAndClose());
-            GUILayout.EndHorizontal();
-            GUILayout.BeginHorizontal();
-            if (GUILayout.Button(_controller.HasUnsavedChanges ? "Discard and close" : "Close", _controller.HasUnsavedChanges ? _danger : _button, GUILayout.Height(RowHeight))) Later(() => _controller.DiscardAndClose());
-            if (GUILayout.Button("Previous save", _button, GUILayout.Height(RowHeight))) Later(() => _controller.RequestRestorePrevious());
+            if (GUILayout.Button("CANCEL", _controller.HasUnsavedChanges ? _danger : _button, GUILayout.Height(RowHeight))) Later(() => _controller.DiscardAndClose());
+            if (GUILayout.Button("SAVE", _button, GUILayout.Height(RowHeight))) Later(() => _controller.Save());
+            if (GUILayout.Button("SAVE & CLOSE", _primary, GUILayout.Height(RowHeight))) Later(() => _controller.SaveAndClose());
             GUILayout.EndHorizontal();
         }
 
@@ -753,7 +595,7 @@ namespace CityTwin.Calibration
         private void EndCard()
         {
             GUILayout.EndVertical();
-            GUILayout.Space(4f);
+            GUILayout.Space(8f);
         }
 
         private float Slider(string label, float value, float min, float max, string format)
@@ -764,23 +606,15 @@ namespace CityTwin.Calibration
             GUILayout.Label(string.Format(format, value), _labelLine);
             GUILayout.EndHorizontal();
 
-            Rect r = GUILayoutUtility.GetRect(10f, 20f, GUILayout.ExpandWidth(true));
+            Rect r = GUILayoutUtility.GetRect(10f, 30f, GUILayout.ExpandWidth(true));
             if (Event.current.type == EventType.Repaint)
             {
                 float fill = Mathf.InverseLerp(min, max, value);
-                var track = new Rect(r.x, r.center.y - 3f, r.width, 6f);
+                var track = new Rect(r.x, r.center.y - 4f, r.width, 8f);
                 DrawRect(track, Control);
                 DrawRect(new Rect(track.x, track.y, track.width * fill, track.height), Accent);
             }
             return GUI.HorizontalSlider(r, value, min, max, _sliderTrack, _sliderThumb);
-        }
-
-        private void ProgressBar(float value)
-        {
-            Rect r = GUILayoutUtility.GetRect(10f, 8f, GUILayout.ExpandWidth(true));
-            if (Event.current.type != EventType.Repaint) return;
-            DrawRect(r, Control);
-            DrawRect(new Rect(r.x, r.y, r.width * Mathf.Clamp01(value), r.height), Good);
         }
 
         private void DrawRect(Rect r, Color color)
@@ -798,14 +632,14 @@ namespace CityTwin.Calibration
             if (_panel != null && _white != null) return;
 
             _white = Solid(Color.white);
-            _panel = new GUIStyle { normal = { background = Solid(Panel) }, padding = new RectOffset(10, 10, 8, 8) };
-            _card = new GUIStyle { normal = { background = Solid(Card) }, padding = new RectOffset(8, 8, 6, 7) };
+            _panel = new GUIStyle { normal = { background = Solid(Panel) }, padding = new RectOffset(14, 14, 8, 12) };
+            _card = new GUIStyle { normal = { background = Solid(Card) }, padding = new RectOffset(12, 12, 10, 12) };
 
-            _title = Text(16, FontStyle.Bold, Color.white);
-            _section = Text(12, FontStyle.Bold, Accent);
-            _section.margin = new RectOffset(0, 0, 0, 3);
-            _label = Text(13, FontStyle.Normal, Color.white);
-            _muted = Text(11, FontStyle.Normal, Muted);
+            _title = Text(26, FontStyle.Bold, Color.white);
+            _section = Text(17, FontStyle.Bold, Accent);
+            _section.margin = new RectOffset(0, 0, 0, 6);
+            _label = Text(20, FontStyle.Bold, Color.white);
+            _muted = Text(15, FontStyle.Normal, Muted);
             _title.wordWrap = false;
             _labelLine = new GUIStyle(_label) { wordWrap = false };
             _mutedLine = new GUIStyle(_muted) { wordWrap = false };
@@ -819,14 +653,14 @@ namespace CityTwin.Calibration
             _tabActive = Button(Accent * 0.72f + Color.black * 0.28f, Accent, Color.white, FontStyle.Bold);
 
             var thumb = Solid(Color.white);
-            _sliderTrack = new GUIStyle { fixedHeight = 20f };
+            _sliderTrack = new GUIStyle { fixedHeight = 30f };
             _sliderThumb = new GUIStyle
             {
                 normal = { background = thumb },
                 hover = { background = thumb },
                 active = { background = Solid(Accent) },
-                fixedWidth = 10f,
-                fixedHeight = 18f,
+                fixedWidth = 16f,
+                fixedHeight = 28f,
             };
         }
 
@@ -857,10 +691,10 @@ namespace CityTwin.Calibration
                 onHover = { background = over, textColor = Color.white },
                 onActive = { background = over, textColor = Color.white },
                 alignment = TextAnchor.MiddleCenter,
-                fontSize = 12,
-                fontStyle = style,
-                margin = new RectOffset(2, 2, 2, 2),
-                padding = new RectOffset(4, 4, 2, 2),
+                fontSize = 18,
+                fontStyle = FontStyle.Bold,
+                margin = new RectOffset(3, 3, 3, 3),
+                padding = new RectOffset(8, 8, 4, 4),
             };
         }
 

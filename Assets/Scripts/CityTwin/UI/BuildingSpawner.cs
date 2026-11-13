@@ -47,6 +47,9 @@ namespace CityTwin.UI
         /// <summary>Fires after a building marker is instantiated (engineTileId, buildingId, marker GameObject).</summary>
         public event System.Action<string, string, GameObject> OnTileSpawned;
 
+        /// <summary>Every building marker currently on the table.</summary>
+        public IEnumerable<GameObject> SpawnedMarkers => _spawned.Values;
+
         public const float DebugHaloMultiplierMin = 0.25f;
         public const float DebugHaloMultiplierMax = 5f;
         public const float DebugHaloMultiplierDefault = 1f;

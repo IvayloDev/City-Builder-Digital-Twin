@@ -163,8 +163,12 @@ public class MouseBuildingTester : MonoBehaviour
     public void RegisterStandInTile(string debugTileId, string buildingId, Vector2 tuioPos)
     {
         if (buildingSpawner == null || string.IsNullOrEmpty(debugTileId)) return;
-        var marker = buildingSpawner.CreateStandIn(buildingId, tuioPos);
+        // The coordinator already shows a stand-in for a tile on the locked table (tutorial): track that one, don't add a
+        // second pin on the same spot.
+        RectTransform marker = coordinator != null ? coordinator.ParkedPinFor(debugTileId) : null;
+        if (marker == null) marker = buildingSpawner.CreateStandIn(buildingId, tuioPos);
         if (marker == null) return;
+        PinDropFx.Find(marker)?.PlayDrop(marker); // put down on the table
         _tiles.Add(new ActiveTile { DebugTileId = debugTileId, Marker = marker, BuildingId = buildingId, StandIn = true });
     }
 
@@ -173,10 +177,12 @@ public class MouseBuildingTester : MonoBehaviour
     {
         var real = FindMarkerRecursive($"{tile.BuildingId}_{engineId}");
         if (real == null) return; // not spawned yet; keep the stand-in
-        if (tile.Marker != null) Object.Destroy(tile.Marker.gameObject);
+        bool held = tile.Marker != null && PinDropFx.Find(tile.Marker) is PinDropFx fx && fx.IsHeld(tile.Marker);
+        if (tile.Marker != null) { PinDropFx.Find(tile.Marker)?.Release(tile.Marker, false); Object.Destroy(tile.Marker.gameObject); }
         tile.Marker = real;
         tile.EngineId = engineId;
         tile.StandIn = false;
+        if (held) PinDropFx.Find(real)?.Hold(real); // still in the hand: the new marker keeps the held look until the drop
     }
 
     private void Update()
@@ -214,9 +220,17 @@ public class MouseBuildingTester : MonoBehaviour
         // F9 calibration owns the mouse and keyboard: nothing may reach the game until it closes.
         if (ProjectionCalibrationController.AnyOpen)
         {
+            ReleaseHeld(_dragging, false);
             _dragging = null;
             return;
         }
+
+        // A stand-in the coordinator counted on its own (tiles put down during the tutorial count when it ends):
+        // pick up the building marker it spawned, so the tile can still be dragged.
+        if (coordinator != null)
+            for (int i = 0; i < _tiles.Count; i++)
+                if (_tiles[i].StandIn && _tiles[i].Marker == null && coordinator.TryGetEngineId(_tiles[i].DebugTileId, out string countedId))
+                    PromoteStandIn(_tiles[i], countedId);
 
         // Road editor owns the mouse while it's active — no tile spawning/dragging.
         if (roadEditor != null && roadEditor.EditModeActive)
@@ -285,8 +299,17 @@ public class MouseBuildingTester : MonoBehaviour
                 var display = _dragging.Marker.GetComponent<BuildingMarkerDisplay>();
                 if (display != null) display.SetPlacementInvalid(false, DiscardIndicatorColor);
             }
+            // Put down: the pin reappears where it was dropped, with the drop ripple (removed pins are gone already).
+            ReleaseHeld(_dragging, true);
             _dragging = null;
         }
+    }
+
+    private static void ReleaseHeld(ActiveTile tile, bool playDrop)
+    {
+        if (tile == null || tile.Marker == null) return;
+        var fx = PinDropFx.Find(tile.Marker);
+        if (fx != null && fx.IsHeld(tile.Marker)) fx.Release(tile.Marker, playDrop);
     }
 
     /// <summary>Halo tint while a dragged pin hovers a discard area (outside the fan / clear zone).</summary>
@@ -317,8 +340,9 @@ public class MouseBuildingTester : MonoBehaviour
                     }
                     else
                     {
-                        // Start dragging this marker.
+                        // Start dragging this marker: it follows the mouse darker and smaller until it is dropped.
                         _dragging = tile;
+                        PinDropFx.Find(tile.Marker)?.Hold(tile.Marker);
                         _pressScreenPos = screenPos;
                         if (TryScreenToContentLocal(screenPos, out var local))
                         {

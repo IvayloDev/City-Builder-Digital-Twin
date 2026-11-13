@@ -263,6 +263,20 @@ namespace CityTwin.Calibration
             if (IsCapturing && !_session.Next()) _setStatus("Capture this target first");
         }
 
+        /// <summary>A click near a target (main window pixels) makes it the current one: retake it or take a skipped one.</summary>
+        public bool TryPickTarget(Vector2 window, float radiusPx)
+        {
+            if (!IsCapturing || _session.IsClearingTable) return false;
+            int best = -1;
+            float bestDistance = radiusPx;
+            for (int i = 0; i < _session.Targets.Count; i++)
+            {
+                float d = Vector2.Distance(_rig.TableUvToWindow(_session.Targets[i]), window);
+                if (d <= bestDistance) { bestDistance = d; best = i; }
+            }
+            return best >= 0 && best != _session.CurrentIndex && _session.GoTo(best);
+        }
+
         public void SkipTarget()
         {
             if (IsCapturing) _session.Skip();
@@ -483,6 +497,9 @@ namespace CityTwin.Calibration
                 {
                     if (!_rig.TryTableUvToProjector(_session.Targets[i], out int p, out Vector2 uv) || p != projector) continue;
                     bool current = i == _session.CurrentIndex;
+                    // A target revisited after its capture keeps its "calibrated" ring under the current cross.
+                    if (current && !_session.AwaitingNext && _session.StateOf(i) == SensorTargetState.Captured)
+                        into.Add(new ProjectorOverlay.Marker { Uv = uv, Kind = ProjectorOverlay.MarkerKind.TargetCaptured });
                     into.Add(new ProjectorOverlay.Marker
                     {
                         Uv = uv,

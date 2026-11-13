@@ -164,7 +164,7 @@ namespace CityTwin.Calibration
         {
             if (_blocked && Vector2.Distance(raw, _blockedAt) <= RearmRawDistance) return true;
             for (int i = 0; i < _targets.Count; i++)
-                if (_states[i] == SensorTargetState.Captured && Vector2.Distance(raw, _captured[i]) <= RearmRawDistance)
+                if (i != CurrentIndex && _states[i] == SensorTargetState.Captured && Vector2.Distance(raw, _captured[i]) <= RearmRawDistance)
                     return true;
             return false;
         }
@@ -186,11 +186,27 @@ namespace CityTwin.Calibration
             return true;
         }
 
-        /// <summary>Move on from a stored target. False while the current target has not been stored yet.</summary>
+        /// <summary>Move on from a stored target (or one captured earlier). False while the current target has no capture.</summary>
         public bool Next()
         {
-            if (IsComplete || IsClearingTable || !AwaitingNext) return false;
+            if (IsComplete || IsClearingTable) return false;
+            if (!AwaitingNext && _states[CurrentIndex] != SensorTargetState.Captured) return false;
             Advance();
+            return true;
+        }
+
+        /// <summary>
+        /// Make any target the current one: to retake it, or to come back to one that was skipped. Its capture is kept
+        /// (and still counts) until a tile held on it replaces it.
+        /// </summary>
+        public bool GoTo(int index)
+        {
+            if (IsClearingTable || index < 0 || index >= _targets.Count) return false;
+            CurrentIndex = index;
+            AwaitingNext = false;
+            _restingSince = -1f;
+            AutoAdvanceIn = -1f;
+            ResetHold();
             return true;
         }
 
@@ -205,33 +221,20 @@ namespace CityTwin.Calibration
         }
 
         /// <summary>
-        /// Undo: on a stored target that is waiting for Next, forget that capture and retake it; otherwise go back one
-        /// target and forget its capture. False if there is nothing to undo.
+        /// Back to the previous target. Captures are kept: a tile held on a captured target replaces its capture,
+        /// Next leaves it as it is. False on the first target.
         /// </summary>
         public bool Back()
         {
-            if (IsClearingTable) return false;
-            if (!AwaitingNext)
-            {
-                if (CurrentIndex <= 0) return false;
-                CurrentIndex--;
-            }
-            if (_states[CurrentIndex] == SensorTargetState.Captured) CapturedCount--;
-            _states[CurrentIndex] = SensorTargetState.Pending;
-            AwaitingNext = false;
-            _blocked = false;
-            _restingSince = -1f;
-            AutoAdvanceIn = -1f;
-            ResetHold();
-            Refit();
-            return true;
+            if (IsClearingTable || CurrentIndex <= 0) return false;
+            return GoTo(Mathf.Min(CurrentIndex, _targets.Count) - 1);
         }
 
         private void Capture(Vector2 raw)
         {
+            if (_states[CurrentIndex] != SensorTargetState.Captured) CapturedCount++; // a retake replaces the old capture
             _captured[CurrentIndex] = raw;
             _states[CurrentIndex] = SensorTargetState.Captured;
-            CapturedCount++;
             AwaitingNext = true;
             _blocked = true;
             _blockedAt = raw;
@@ -241,9 +244,17 @@ namespace CityTwin.Calibration
             Refit();
         }
 
+        // To the next target still waiting for a capture (after the current one, then from the start); none left = done.
         private void Advance()
         {
-            CurrentIndex++;
+            int next = _targets.Count;
+            for (int k = 1; k <= _targets.Count; k++)
+            {
+                int i = CurrentIndex + k;
+                if (i >= _targets.Count) i -= _targets.Count;
+                if (_states[i] == SensorTargetState.Pending) { next = i; break; }
+            }
+            CurrentIndex = next;
             AwaitingNext = false;
             _restingSince = -1f;
             AutoAdvanceIn = -1f;

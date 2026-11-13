@@ -19,7 +19,11 @@ namespace CityTwin.UI
         [SerializeField] private DashboardController dashboard;
         [SerializeField] private RectTransform contentRoot;
 
-        [Header("Ripple")]
+        [Header("Pin drop")]
+        [Tooltip("Lift/drop effect with the echo ripple (auto-added on this object when empty). Tune it on the PinDropFx component. When set, it replaces the legacy disc ripple below.")]
+        [SerializeField] private PinDropFx pinDrop;
+
+        [Header("Ripple (legacy, used only without PinDropFx)")]
         [Tooltip("Fallback disc radius when neither the building marker halo nor the engine impact " +
                  "radius can be resolved. In content-root space.")]
         [SerializeField] private float rippleFallbackRadius = 112f;
@@ -54,6 +58,8 @@ namespace CityTwin.UI
             if (dashboard == null) dashboard = GetComponentInParent<DashboardController>()
                                                ?? FindFirstObjectByType<DashboardController>();
             if (contentRoot == null && buildingSpawner != null) contentRoot = buildingSpawner.ContentRoot;
+            if (pinDrop == null) pinDrop = GetComponent<PinDropFx>();
+            if (pinDrop == null) pinDrop = gameObject.AddComponent<PinDropFx>();
 
             if (buildingSpawner == null || simulationEngine == null || contentRoot == null)
                 Debug.LogError("[PlacementFxController] Missing required refs — FX will not run. " +
@@ -88,7 +94,8 @@ namespace CityTwin.UI
             Vector2 anchored = ResolveMarkerAnchored(marker);
             float radius = ResolveRippleRadius(buildingId);
             Color color = ResolveCategoryColor(buildingId);
-            SpawnRipple(anchored, radius, color);
+            if (pinDrop != null && pinDrop.isActiveAndEnabled) pinDrop.PlayDrop(marker.transform, color);
+            else SpawnRipple(anchored, radius, color);
 
             // Coordinator order is AddTile → OnMetricsChanged → SpawnBuilding → OnTileSpawned.
             // So by the time we get here, _currentFrame already holds POST-placement metrics and

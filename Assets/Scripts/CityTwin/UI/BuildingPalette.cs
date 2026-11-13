@@ -137,7 +137,6 @@ namespace CityTwin.UI
                 RectTransform anchor = pinAnchors != null && i < pinAnchors.Length ? pinAnchors[i] : null;
                 if (anchor != null)
                 {
-                    CreateSlotPlaceholder(Vector2.zero, anchor); // created first so it renders behind the pin
                     _items.Add(CreateItem(defs[i], Vector2.zero, anchor));
                     continue;
                 }
@@ -146,7 +145,6 @@ namespace CityTwin.UI
                 int idx = onLeft ? i : i - leftCount;
                 int total = onLeft ? leftCount : defs.Count - leftCount;
                 Vector2 pos = ClusterPosition(onLeft ? leftClusterCenter : rightClusterCenter, idx, total);
-                CreateSlotPlaceholder(pos, (RectTransform)transform);
                 _items.Add(CreateItem(defs[i], pos, (RectTransform)transform));
             }
         }
@@ -234,7 +232,7 @@ namespace CityTwin.UI
             rt.anchoredPosition = anchoredPos;
 
             var bg = go.AddComponent<Image>();
-            bg.color = itemBackground;
+            bg.color = Color.clear; // no square behind the round pin; still the drag surface
             bg.raycastTarget = true; // drag surface
 
             // Icon
@@ -265,7 +263,7 @@ namespace CityTwin.UI
             priceBgRt.sizeDelta = new Vector2(0f, priceH);
             var priceBg = priceBgGo.AddComponent<Image>();
             priceBg.raycastTarget = false;
-            priceBg.color = new Color(0f, 0f, 0f, 0.55f);
+            priceBg.color = Color.clear; // no backdrop: the price reads in the pin's own colour
 
             var priceGo = new GameObject("Price", typeof(RectTransform));
             var priceRt = (RectTransform)priceGo.transform;
@@ -278,12 +276,32 @@ namespace CityTwin.UI
             price.raycastTarget = false;
             price.text = "$" + def.Price;
             price.fontSize = priceFontSize;
-            price.color = priceColor;
+            price.fontStyle = FontStyles.Bold;
+            price.color = PinColor(def);
             price.alignment = TextAlignmentOptions.Center;
 
             var item = go.AddComponent<PaletteItem>();
             item.Init(this, def);
             return go;
+        }
+
+        [Header("Pin colours (price label)")]
+        [SerializeField] private Color environmentColor = new Color(0.72f, 1f, 0.25f, 1f);
+        [SerializeField] private Color economyColor = new Color(1f, 0.56f, 0.12f, 1f);
+        [SerializeField] private Color healthSafetyColor = new Color(0.33f, 0.58f, 1f, 1f);
+        [SerializeField] private Color cultureEduColor = new Color(1f, 0.25f, 0.85f, 1f);
+
+        /// <summary>The colour of a pin's icon, by its building category (falls back to the old price colour).</summary>
+        private Color PinColor(BuildingDefinition def)
+        {
+            switch (def != null ? def.Category : null)
+            {
+                case "Environment": return environmentColor;
+                case "Economy": return economyColor;
+                case "HealthSafety": return healthSafetyColor;
+                case "CultureEdu": return cultureEduColor;
+                default: return priceColor;
+            }
         }
 
         private Camera EventCamera(PointerEventData eventData)
@@ -307,12 +325,16 @@ namespace CityTwin.UI
             img.preserveAspect = true;
             if (buildingSpawner != null && buildingSpawner.TryGetPreviewSprite(def.Id, out Sprite sprite) && sprite != null)
                 img.sprite = sprite;
-            var c = img.color;
-            c.a = ghostAlpha;
-            img.color = c;
+            // The pin in the hand: darker and smaller (PinDropFx's held look), the tray slot stays empty meanwhile.
+            var fx = PinDropFx.Find(transform);
+            _ghostAlpha = fx != null ? fx.HeldAlpha : ghostAlpha;
+            _ghost.sizeDelta = Vector2.one * itemSize * (fx != null ? fx.HeldScale : 0.75f);
+            img.color = new Color(1f, 1f, 1f, _ghostAlpha);
 
             MoveGhost(eventData);
         }
+
+        private float _ghostAlpha = 0.45f;
 
         internal void MoveGhost(PointerEventData eventData)
         {
@@ -327,8 +349,8 @@ namespace CityTwin.UI
             {
                 bool inside = tableBounds.ContainsScreenPoint(eventData.position, EventCamera(eventData));
                 img.color = inside
-                    ? new Color(1f, 1f, 1f, ghostAlpha)
-                    : new Color(1f, 0.45f, 0.45f, ghostAlpha * 0.8f);
+                    ? new Color(1f, 1f, 1f, _ghostAlpha)
+                    : new Color(1f, 0.45f, 0.45f, _ghostAlpha);
             }
         }
 
@@ -336,13 +358,43 @@ namespace CityTwin.UI
         {
             EndGhostVisual();
             if (coordinator == null || buildingSpawner == null || buildingSpawner.ContentRoot == null)
+            {
+                ReturnPinToTray(ripple: true);
                 return;
+            }
 
             Camera cam = EventCamera(eventData);
 
             RectTransform root = buildingSpawner.ContentRoot;
+            bool placed = false;
+            try { placed = PlaceDrop(def, eventData, cam, root); }
+            finally { ReturnPinToTray(ripple: !placed); }
+        }
+
+        // The tray pin hides while dragged (the tile is in the hand). The tray is a source, so it always comes back:
+        // quietly when the drop landed on the table, with the drop ripple when the drop was discarded.
+        private Transform _heldTrayPin;
+
+        internal void HoldTrayPin(Transform pin)
+        {
+            _heldTrayPin = pin;
+            var fx = PinDropFx.Find(pin);
+            if (fx != null) fx.Hold(pin, hide: true); // the ghost under the mouse is the pin now
+        }
+
+        private void ReturnPinToTray(bool ripple)
+        {
+            if (_heldTrayPin == null) return;
+            var fx = PinDropFx.Find(_heldTrayPin);
+            if (fx != null) fx.Release(_heldTrayPin, ripple);
+            _heldTrayPin = null;
+        }
+
+        // True once something lies on the table where the pin was dropped (building or stand-in).
+        private bool PlaceDrop(BuildingDefinition def, PointerEventData eventData, Camera cam, RectTransform root)
+        {
             if (!RectTransformUtility.ScreenPointToWorldPointInRectangle(root, eventData.position, cam, out Vector3 world))
-                return;
+                return false;
 
             Vector2 local = buildingSpawner.WorldToContentLocal(world);
             Vector2 tuio = buildingSpawner.LocalToTuioPosition(local);
@@ -355,13 +407,13 @@ namespace CityTwin.UI
 
             // Dropped outside the blue fan → discard silently.
             if (!pickedLanguage && tableBounds != null && !tableBounds.ContainsScreenPoint(eventData.position, cam))
-                return;
+                return false;
 
             if (!coordinator.TryProcessTileUpdate(pose, out string engineId) || string.IsNullOrEmpty(engineId))
             {
                 // Not counted (language pick, table locked, ...): like a physical tile, it stays lying on the table.
                 if (mouseTester != null) mouseTester.RegisterStandInTile(tileId, def.Id, tuio);
-                return;
+                return true;
             }
 
             // Hand the placed building to MouseBuildingTester so it can be dragged/discarded.
@@ -370,6 +422,7 @@ namespace CityTwin.UI
                 RectTransform marker = FindMarker(root, def.Id + "_" + engineId);
                 mouseTester.RegisterExternalTile(tileId, engineId, marker, def.Id);
             }
+            return true;
         }
 
         private void EndGhostVisual()
@@ -403,7 +456,12 @@ namespace CityTwin.UI
                 _def = def;
             }
 
-            public void OnBeginDrag(PointerEventData eventData) => _palette?.BeginGhost(_def, eventData);
+            public void OnBeginDrag(PointerEventData eventData)
+            {
+                _palette?.BeginGhost(_def, eventData);
+                _palette?.HoldTrayPin(transform);
+            }
+
             public void OnDrag(PointerEventData eventData) => _palette?.MoveGhost(eventData);
             public void OnEndDrag(PointerEventData eventData) => _palette?.EndGhost(_def, eventData);
         }

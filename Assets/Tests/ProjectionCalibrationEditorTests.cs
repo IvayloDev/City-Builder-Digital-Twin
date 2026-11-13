@@ -35,6 +35,27 @@ namespace CityTwin.Tests
         }
 
         [Test]
+        public void CornerProxies_StartHalfWayIn_AndDragMovesTheOuterCorners()
+        {
+            var list = ProjectorCalibration.DefaultSingleProjectorLayout();
+            var ed = new ProjectionCalibrationEditor(list) { UseCornerProxies = true };
+            Assert.That(ProjectionCalibrationEditor.TryGetCornerProxies(list[0], out var proxies), Is.True);
+            // The flat frame maps to the whole projector, so the proxies are the middle half of the screen.
+            Assert.That(Vector2.Distance(proxies[0], new Vector2(0.25f, 0.25f)), Is.LessThan(1e-4f));
+            Assert.That(Vector2.Distance(proxies[2], new Vector2(0.75f, 0.75f)), Is.LessThan(1e-4f));
+
+            ed.SelectHandle(0);
+            ed.DragSelectedTo(new Vector2(0.2f, 0.22f));
+
+            Assert.That(ProjectionCalibrationEditor.TryGetCornerProxies(list[0], out var moved), Is.True);
+            Assert.That(Vector2.Distance(moved[0], new Vector2(0.2f, 0.22f)), Is.LessThan(1e-4f), "the dragged proxy lands under the mouse");
+            for (int i = 1; i < 4; i++)
+                Assert.That(Vector2.Distance(moved[i], proxies[i]), Is.LessThan(1e-4f), "the other proxies stay put");
+            Assert.That(list[0].projectorPoints[0].x, Is.LessThan(0f), "the outer corner moves out past the frame edge");
+            Assert.That(ed.IsDirty, Is.True);
+        }
+
+        [Test]
         public void Selection_Wraps()
         {
             var (ed, _) = NewEditor();

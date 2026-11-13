@@ -471,10 +471,12 @@ namespace CityTwin.Calibration
                 scaler = canvas.GetComponent<CanvasScaler>();
                 if (scaler != null) break;
             }
+            // Same framing as the flat preview: the play area fit sets the scaler's Expand reference first.
+            if (scaler != null && scaler.uiScaleMode == CanvasScaler.ScaleMode.ScaleWithScreenSize) CityTwin.UI.PlayAreaFit.EnsureOn(scaler)?.Apply();
             if (scaler == null || scaler.uiScaleMode != CanvasScaler.ScaleMode.ScaleWithScreenSize
-                || scaler.screenMatchMode != CanvasScaler.ScreenMatchMode.MatchWidthOrHeight)
+)
             {
-                Debug.LogWarning("[ProjectionOutputRig] No 'Scale With Screen Size / Match Width Or Height' canvas on the source camera; the table image keeps the canvas's own scaling.", this);
+                Debug.LogWarning("[ProjectionOutputRig] No 'Scale With Screen Size' canvas on the source camera; the table image keeps the canvas's own scaling.", this);
                 return;
             }
 
@@ -482,7 +484,11 @@ namespace CityTwin.Calibration
             Vector2 reference = scaler.referenceResolution;
             // CanvasScaler's own formula for a screen of this shape (size cancels out): canvas width in canvas units.
             float logWidth = Mathf.Log(aspect / reference.x, 2f), logHeight = Mathf.Log(1f / reference.y, 2f);
-            float flatScale = Mathf.Pow(2f, Mathf.Lerp(logWidth, logHeight, scaler.matchWidthOrHeight));
+            float flatScale = scaler.screenMatchMode == CanvasScaler.ScreenMatchMode.Expand
+                ? Mathf.Min(aspect / reference.x, 1f / reference.y) // Expand: the whole reference area always fits
+                : scaler.screenMatchMode == CanvasScaler.ScreenMatchMode.Shrink
+                    ? Mathf.Max(aspect / reference.x, 1f / reference.y)
+                    : Mathf.Pow(2f, Mathf.Lerp(logWidth, logHeight, scaler.matchWidthOrHeight));
             float flatWidthUnits = aspect / flatScale;
 
             _flatViewScaler = scaler;

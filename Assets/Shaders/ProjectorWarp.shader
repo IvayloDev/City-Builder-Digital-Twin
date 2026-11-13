@@ -12,7 +12,9 @@ Shader "CityTwin/ProjectorWarp"
         _MainTex ("Table Texture", 2D) = "black" {}
         _Seam ("Seam (normal x, normal y, offset, enabled)", Vector) = (-0.7071068, 0.7071068, 0, 1)
         _CircleMask ("Circle Mask (cx, cy, radius, feather)", Vector) = (0.5, 0.5, 0, 0.004)
-        _PatternMode ("Test Pattern (0 off, 1 overlay, 2 pattern only, 3 white, 4 black)", Float) = 0
+        _PatternMode ("Test Pattern (0 off, 1 overlay, 2 pattern only, 3 white, 4 black, 5 masked grid)", Float) = 0
+        _GameMaskTex ("Game Mask (play area art, alpha)", 2D) = "white" {}
+        _GameMaskCount ("Game Mask Count", Float) = 0
         _GridSpacing ("Grid Spacing (table uv)", Float) = 0.0833333
         _CentralRadius ("Central Piece Radius (table uv)", Float) = 0.1416667
         _Tint ("Projector Tint", Color) = (1, 1, 1, 1)
@@ -44,7 +46,17 @@ Shader "CityTwin/ProjectorWarp"
                 float _GridSpacing;
                 float _CentralRadius;
                 float4 _Tint;
+                float _GameMaskCount;
             CBUFFER_END
+
+            // Masked grid: up to four play areas, each the game's fan art placed on the table.
+            // Table uv -> mask texture uv is affine: u = dot(A.xy, uv) + A.z, v = dot(B.xy, uv) + B.z.
+            // Rect = the sprite's uv rect in the texture (outside it = not this play area).
+            TEXTURE2D(_GameMaskTex);
+            SAMPLER(sampler_GameMaskTex);
+            float4 _GameMaskA[4];
+            float4 _GameMaskB[4];
+            float4 _GameMaskRect[4];
 
             struct Attributes
             {
@@ -91,13 +103,40 @@ Shader "CityTwin/ProjectorWarp"
                 return float3(grid, strong, seam);
             }
 
+            // 0..1 how much of the play area art covers this table point: its alpha only, so the shape is the solid
+            // silhouette of the play area, not the map details drawn inside it.
+            float GameMaskCoverage(float2 uv)
+            {
+                int count = (int)round(_GameMaskCount);
+                if (count <= 0) return 1.0; // no game running: grid everywhere
+                float best = 0.0;
+                [unroll] for (int k = 0; k < 4; k++)
+                {
+                    if (k >= count) break;
+                    float2 t = float2(dot(_GameMaskA[k].xy, uv) + _GameMaskA[k].z, dot(_GameMaskB[k].xy, uv) + _GameMaskB[k].z);
+                    float4 r = _GameMaskRect[k];
+                    if (any(t < r.xy) || any(t > r.zw)) continue;
+                    half4 s = SAMPLE_TEXTURE2D_LOD(_GameMaskTex, sampler_GameMaskTex, t, 0);
+                    float a = smoothstep(0.2, 0.5, s.a);
+                    best = max(best, a);
+                }
+                return best;
+            }
+
+            // Grid line coverage for a square grid of the given spacing (table uv).
+            float Grid(float2 uv, float spacing, float widthPx)
+            {
+                float2 d = abs(frac(uv / spacing - 0.5) - 0.5) * spacing;
+                return max(LineMask(d.x, widthPx), LineMask(d.y, widthPx));
+            }
+
             half4 frag(Varyings i) : SV_Target
             {
                 if (any(i.uv < 0.0) || any(i.uv > 1.0)) return half4(0.0, 0.0, 0.0, 1.0); // off the table: black, not smeared edge pixels
                 half3 col = SAMPLE_TEXTURE2D(_MainTex, sampler_MainTex, i.uv).rgb;
 
                 int mode = (int)round(_PatternMode);
-                if (mode == 2 || mode == 4) col = 0;
+                if (mode == 2 || mode == 4 || mode == 5) col = 0;
                 else if (mode == 3) col = 1;
                 if (mode == 1 || mode == 2)
                 {
@@ -105,6 +144,18 @@ Shader "CityTwin/ProjectorWarp"
                     col = lerp(col, half3(0.45, 0.45, 0.45), p.x);
                     col = lerp(col, half3(1.0, 0.85, 0.1), p.z);
                     col = lerp(col, half3(1.0, 1.0, 1.0), p.y);
+                }
+                if (mode == 5)
+                {
+                    // Play area: solid blue with a fine grid (half spacing) and brighter majors; outside: a coarse, dim grid.
+                    float inside = GameMaskCoverage(i.uv);
+                    half3 outsideCol = lerp(half3(0.0, 0.0, 0.0), half3(0.26, 0.27, 0.30), Grid(i.uv, _GridSpacing * 2.0, 1.5));
+                    half3 insideCol = half3(0.0, 0.22, 0.62);
+                    insideCol = lerp(insideCol, half3(0.2, 0.55, 0.95), Grid(i.uv, _GridSpacing * 0.5, 1.5));
+                    insideCol = lerp(insideCol, half3(0.55, 0.85, 1.0), Grid(i.uv, _GridSpacing, 2.5));
+                    col = lerp(outsideCol, insideCol, inside);
+                    float3 p = TestPattern(i.uv);
+                    col = lerp(col, half3(1.0, 0.85, 0.1), p.z); // seam
                 }
                 if (mode != 0) col *= _Tint.rgb;
 

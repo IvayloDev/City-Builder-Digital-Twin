@@ -34,6 +34,17 @@ namespace CityTwin.Calibration
         public int SelectedNode { get; private set; }
         public CalibrationEditTarget Target { get; private set; } = CalibrationEditTarget.ControlPoints;
 
+        /// <summary>
+        /// Corner points are edited through proxies: four points half way in (the table frame shrunk to
+        /// <see cref="ProxyScale"/> around its centre, so they start on the middle half of the screen). Moving a proxy
+        /// solves the corner pin through the four proxies and moves the real (outer) corners with it. The outer corners
+        /// stay at the edge of the projection, where they are often off the round table and can't be aimed at.
+        /// </summary>
+        public bool UseCornerProxies { get; set; }
+
+        /// <summary>Proxy frame size as a fraction of the table frame.</summary>
+        public const float ProxyScale = 0.5f;
+
         /// <summary>True when there are edits not yet saved.</summary>
         public bool IsDirty { get; private set; }
         public int UndoDepth => _undo.Count;
@@ -139,8 +150,13 @@ namespace CityTwin.Calibration
             if (c == null || HandleCount == 0) return;
             var delta = new Vector2(pixels.x / Mathf.Max(1f, outputPixelSize.x), pixels.y / Mathf.Max(1f, outputPixelSize.y));
             RecordUndo();
-            if (Target == CalibrationEditTarget.ControlPoints) c.projectorPoints[SelectedPoint] += delta;
-            else c.meshOffsets[SelectedNode] += delta;
+            if (Target == CalibrationEditTarget.MeshNodes) c.meshOffsets[SelectedNode] += delta;
+            else if (UseCornerProxies && TryGetCornerProxies(c, out var proxies))
+            {
+                proxies[SelectedPoint] += delta;
+                ApplyCornerProxies(c, proxies);
+            }
+            else c.projectorPoints[SelectedPoint] += delta;
             Changed(SelectedProjector);
         }
 
@@ -159,10 +175,15 @@ namespace CityTwin.Calibration
             var c = Current;
             if (c == null || HandleCount == 0) return;
             if (!_dragRecorded) BeginDrag();
-            if (Target == CalibrationEditTarget.ControlPoints)
-                c.projectorPoints[SelectedPoint] = projectorUv;
-            else
+            if (Target == CalibrationEditTarget.MeshNodes)
                 c.meshOffsets[SelectedNode] = projectorUv - ProjectionMath.MeshNodeRestUv(c, SelectedNode);
+            else if (UseCornerProxies && TryGetCornerProxies(c, out var proxies))
+            {
+                proxies[SelectedPoint] = projectorUv;
+                ApplyCornerProxies(c, proxies);
+            }
+            else
+                c.projectorPoints[SelectedPoint] = projectorUv;
             Changed(SelectedProjector);
         }
 
@@ -180,7 +201,12 @@ namespace CityTwin.Calibration
             {
                 var original = new ProjectorCalibration();
                 JsonUtility.FromJsonOverwrite(_openSnapshot[SelectedProjector], original);
-                if (original.projectorPoints != null && SelectedPoint < original.projectorPoints.Length)
+                if (UseCornerProxies && TryGetCornerProxies(c, out var proxies) && TryGetCornerProxies(original, out var originalProxies))
+                {
+                    proxies[SelectedPoint] = originalProxies[SelectedPoint];
+                    ApplyCornerProxies(c, proxies);
+                }
+                else if (original.projectorPoints != null && SelectedPoint < original.projectorPoints.Length)
                     c.projectorPoints[SelectedPoint] = original.projectorPoints[SelectedPoint];
             }
             Changed(SelectedProjector);
@@ -221,6 +247,45 @@ namespace CityTwin.Calibration
             }
             ClampSelection();
             Changed(-1);
+            return true;
+        }
+
+        // ---------- corner proxies ----------
+
+        /// <summary>The table frame shrunk to <see cref="ProxyScale"/> around its centre (table uv). False without exactly 4 corners.</summary>
+        public static bool TryGetProxyTablePoints(ProjectorCalibration c, out Vector2[] inner)
+        {
+            inner = null;
+            if (c?.tablePoints == null || c.tablePoints.Length != 4 || c.projectorPoints == null || c.projectorPoints.Length != 4) return false;
+            Vector2 centre = Vector2.zero;
+            for (int i = 0; i < 4; i++) centre += c.tablePoints[i];
+            centre *= 0.25f;
+            inner = new Vector2[4];
+            for (int i = 0; i < 4; i++) inner[i] = centre + (c.tablePoints[i] - centre) * ProxyScale;
+            return true;
+        }
+
+        /// <summary>Where the proxies sit on the projector (projector uv), through the current corner pin.</summary>
+        public static bool TryGetCornerProxies(ProjectorCalibration c, out Vector2[] proxies)
+        {
+            proxies = null;
+            if (!TryGetProxyTablePoints(c, out var inner) || !c.TryGetTableToProjector(out var h)) return false;
+            proxies = new Vector2[4];
+            for (int i = 0; i < 4; i++) proxies[i] = h.Apply(inner[i]);
+            return true;
+        }
+
+        /// <summary>Move the real corners so the corner pin passes through the proxies. Unchanged when they are degenerate.</summary>
+        public static bool ApplyCornerProxies(ProjectorCalibration c, Vector2[] proxies)
+        {
+            if (!TryGetProxyTablePoints(c, out var inner) || !Homography.TrySolve(inner, proxies, out var h)) return false;
+            var outer = new Vector2[4];
+            for (int i = 0; i < 4; i++)
+            {
+                outer[i] = h.Apply(c.tablePoints[i]);
+                if (!float.IsFinite(outer[i].x) || !float.IsFinite(outer[i].y)) return false;
+            }
+            for (int i = 0; i < 4; i++) c.projectorPoints[i] = outer[i];
             return true;
         }
 

@@ -67,7 +67,7 @@ namespace CityTwin.Core
 
                 var rt = (RectTransform)clone.transform;
                 var srcRt = (RectTransform)src.transform;
-                rt.anchoredPosition = srcRt.anchoredPosition + new Vector2(0f, -44f);
+                rt.anchoredPosition = srcRt.anchoredPosition + new Vector2(0f, -92f); // below the drop box, not inside it
 
                 _label = clone.GetComponent<TMP_Text>();
                 _label.enableAutoSizing = false;

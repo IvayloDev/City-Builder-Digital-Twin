@@ -128,6 +128,9 @@ namespace CityTwin.UI
         public event Action OnTutorialComplete;
         public bool IsRunning => _isRunning;
 
+        /// <summary>The SKIP button while it shows (a tile put on it skips the tutorial), else null.</summary>
+        public RectTransform SkipTarget => _isRunning && skipButton != null && skipButton.activeInHierarchy ? skipButton.transform as RectTransform : null;
+
         /// <summary>Over-budget placement feedback, spoken by the bottom-right robot popup like every
         /// other tip. Important enough to bypass the minimum tip gap.</summary>
         public void ShowBudgetDepletedTip()
