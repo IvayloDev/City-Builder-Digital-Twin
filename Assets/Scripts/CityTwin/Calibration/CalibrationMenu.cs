@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.UI;
+using CityTwin.Core;
 
 namespace CityTwin.Calibration
 {
@@ -60,9 +62,13 @@ namespace CityTwin.Calibration
         private Vector2 _placedPixels; // top-left in window pixels, so A- and A+ don't move the panel
         private float _width = PanelWidth;
         private float _userHeight; // 0 = follow the content
+        private int _blueFrame = -1;
+        private int _followArea = int.MinValue;
+        private bool _spawnOk;
+        private Rect _spawnGui; // the projector image that play area is shown on, GUI pixels, y down
         private bool _pointerActive, _pointerMoved;
         private int _resizeX, _resizeY; // both 0 = moving
-        private Vector2 _pressMouse;
+        private Vector2 _pressScreen;
         private Rect _pressRect;
                 private Action _pending;
 
@@ -87,7 +93,32 @@ namespace CityTwin.Calibration
             action?.Invoke();
         }
 
-        private float Scale => Mathf.Clamp(Screen.height / ReferenceHeight * _sizeFactor, MinScale, MaxScale);
+        // Four tables: the fan is a thin arch, so the single-screen minimum (0.75) would still spill out of the blue.
+        private float Scale
+        {
+            get
+            {
+                float screen = Mathf.Clamp(Screen.height / ReferenceHeight * _sizeFactor, MinScale, MaxScale);
+                if (!FourTables || !TrySpawnScreen(out Rect spawn)) return screen;
+                float longest = Mathf.Max(_width, WantedHeight);
+                float fit = Mathf.Min(spawn.width, spawn.height) * 0.78f / Mathf.Max(1f, longest) * _sizeFactor;
+                return Mathf.Clamp(fit, 0.35f, screen);
+            }
+        }
+
+        /// <summary>Two projectors, four play areas. The menu then turns over and shrinks into the blue fan.</summary>
+        private bool FourTables
+        {
+            get
+            {
+                var setup = _rig != null ? _rig.ActiveSetup : null;
+                if (setup == null) return false;
+                int running = 0;
+                for (int i = 0; i < 4; i++)
+                    if (setup.RunsPlayArea(i)) running++;
+                return running >= 2;
+            }
+        }
 
         private Rect PanelRect(float scale, int dock)
         {
@@ -95,6 +126,22 @@ namespace CityTwin.Calibration
             float maxHeight = screenH - Margin * 2f;
             float width = Mathf.Min(_width, screenW - Margin * 2f);
             float height = Mathf.Min(_userHeight > 0f ? Mathf.Max(_userHeight, MinPanelHeight) : WantedHeight + RoundingSlack, maxHeight);
+            if (FourTables)
+            {
+                int areaIndex = _sensors != null ? _sensors.SelectedIndex : int.MinValue;
+                if (areaIndex != _followArea)
+                {
+                    _followArea = areaIndex;
+                    _placed = false;
+                }
+                if (!_placed && TrySpawnScreen(out Rect spawn))
+                {
+                    return new Rect(
+                        spawn.center.x / scale - width * 0.5f,
+                        spawn.center.y / scale - height * 0.5f,
+                        width, height);
+                }
+            }
             if (_placed)
             {
                 return new Rect(
@@ -102,8 +149,125 @@ namespace CityTwin.Calibration
                     Mathf.Clamp(_placedPixels.y / scale, 0f, screenH - height),
                     width, height);
             }
-            float x = dock < 0 ? Margin : dock > 0 ? screenW - width - Margin : (screenW - width) * 0.5f;
-            return new Rect(x, (screenH - height) * 0.5f, width, height);
+            float left = dock < 0 ? Margin : dock > 0 ? screenW - width - Margin : (screenW - width) * 0.5f;
+            return new Rect(left, (screenH - height) * 0.5f, width, height);
+        }
+
+        /// <summary>Projector image the selected play area is shown on, in GUI pixels (y down).</summary>
+        private bool TrySpawnScreen(out Rect screen)
+        {
+            if (_blueFrame != Time.frameCount) CacheBlueZone();
+            screen = _spawnGui;
+            return _spawnOk;
+        }
+
+        /// <summary>Next time the panel is drawn, sit it in the middle of the screen that play area is on.</summary>
+        public void RecenterOnSpawnScreen()
+        {
+            _placed = false;
+            _followArea = _sensors != null ? _sensors.SelectedIndex : int.MinValue;
+        }
+
+        private void CacheBlueZone()
+        {
+            _blueFrame = Time.frameCount;
+            _spawnOk = false;
+            _spawnGui = default;
+            var area = _sensors != null ? _sensors.SelectedArea : null;
+            if (area == null || area.Sensor == null || _rig == null || _rig.Outputs == null) return;
+            var root = area.Sensor.GetComponentInParent<GameInstanceRoot>(true);
+            if (root == null) return;
+            Image art = null;
+            var images = root.GetComponentsInChildren<Image>(true);
+            for (int i = 0; i < images.Length; i++)
+            {
+                if (images[i].name != "Main BG" || Under(images[i].transform, "End Screen")) continue;
+                art = images[i];
+                break;
+            }
+            if (art == null) return;
+
+            // One fan can cross the projector seam. The screen it spawns on is the projector that shows most of it.
+            var rt = art.rectTransform;
+            Rect rect = rt.rect;
+            const int cols = 7;
+            const int rows = 3;
+            int count = 0;
+            int projectors = _rig.Outputs.Count;
+            var votes = new int[Mathf.Max(1, projectors)];
+            for (int y = 0; y < rows; y++)
+            {
+                float ty = Mathf.Lerp(0.16f, 0.34f, rows == 1 ? 0.5f : y / (float)(rows - 1));
+                for (int x = 0; x < cols; x++)
+                {
+                    float tx = Mathf.Lerp(0.18f, 0.82f, cols == 1 ? 0.5f : x / (float)(cols - 1));
+                    var world = rt.TransformPoint(new Vector3(
+                        Mathf.Lerp(rect.xMin, rect.xMax, tx),
+                        Mathf.Lerp(rect.yMin, rect.yMax, ty),
+                        0f));
+                    if (!TryWindowPoint(world, out Vector2 window)) continue;
+                    int projector = ProjectorOf(window);
+                    if (projector < 0) continue;
+                    votes[projector]++;
+                    count++;
+                }
+            }
+            if (count < 3) return;
+
+            int best = 0;
+            for (int i = 1; i < votes.Length; i++)
+                if (votes[i] > votes[best]) best = i;
+            var spawnCam = best < _rig.Outputs.Count && _rig.Outputs[best] != null ? _rig.Outputs[best].OutputCamera : null;
+            if (spawnCam == null) return;
+            Rect r = spawnCam.pixelRect;
+            if (r.width < 30f || r.height < 30f) return;
+            _spawnGui = new Rect(r.x, Screen.height - (r.y + r.height), r.width, r.height);
+            _spawnOk = true;
+        }
+
+        private bool TryWindowPoint(Vector3 world, out Vector2 window)
+        {
+            window = default;
+            if (!_rig.TryWorldToTableUv(world, out Vector2 uv)) return false;
+            window = _rig.TableUvToWindow(uv);
+            return window.x > -10000f;
+        }
+
+        private int ProjectorOf(Vector2 window)
+        {
+            var outputs = _rig.Outputs;
+            for (int i = 0; i < outputs.Count; i++)
+            {
+                var camera = outputs[i] != null ? outputs[i].OutputCamera : null;
+                if (camera == null || camera.targetDisplay != 0) continue;
+                if (camera.pixelRect.Contains(window)) return i;
+            }
+            return -1;
+        }
+
+        private static bool Under(Transform t, string ancestor)
+        {
+            while (t != null)
+            {
+                if (t.name == ancestor) return true;
+                t = t.parent;
+            }
+            return false;
+        }
+
+        // 180° about the panel centre: same footprint, readable from the far side of a four-table wedge.
+        private void PushMatrix(float scale, Rect panel)
+        {
+            if (!FourTables)
+            {
+                GUI.matrix = Matrix4x4.Scale(new Vector3(scale, scale, 1f));
+                return;
+            }
+            var pivot = new Vector3(panel.center.x * scale, panel.center.y * scale, 0f);
+            GUI.matrix = Matrix4x4.Translate(pivot)
+                * Matrix4x4.Rotate(Quaternion.Euler(0f, 0f, 180f))
+                * Matrix4x4.Scale(new Vector3(scale, scale, 1f))
+                * Matrix4x4.Translate(new Vector3(-panel.center.x, -panel.center.y, 0f));
         }
 
         // Header, tabs and footer always stay reachable; only the middle scrolls.
@@ -146,18 +310,18 @@ namespace CityTwin.Calibration
             EnsureStyles();
             float scale = Scale;
             var previousMatrix = GUI.matrix;
-            GUI.matrix = Matrix4x4.Scale(new Vector3(scale, scale, 1f));
 
             // The menu is drawn on the projected image: during a camera capture keep it to one small bar.
             if (!_controller.SetupTabOpen && _controller.CameraTabOpen && _sensors.IsCapturing)
             {
-                DrawCompactCapture();
+                DrawCompactCapture(scale);
                 GUI.matrix = previousMatrix;
                 return;
             }
 
-            AvoidFocus(scale);
+            if (!FourTables) AvoidFocus(scale);
             Rect panel = PanelRect(scale, _dock);
+            PushMatrix(scale, panel);
             int pointerControl = GUIUtility.GetControlID(FocusType.Passive);
             HandlePointer(panel, scale, pointerControl);
             GUILayout.BeginArea(panel, _panel);
@@ -201,13 +365,19 @@ namespace CityTwin.Calibration
         private const float CompactInset = 0.07f;
 
         // One row of big buttons, centred at the bottom (the black band under a letterboxed frame); the on-table text says what to do.
-        private void DrawCompactCapture()
+        private void DrawCompactCapture(float scale)
         {
             var session = _sensors.Session;
-            float screenW = Screen.width / Scale, screenH = Screen.height / Scale;
+            float screenW = Screen.width / scale, screenH = Screen.height / scale;
             float width = Mathf.Min(CompactWidth, screenW - Margin * 2f);
             float height = CompactButtonHeight + 20f;
-            var area = new Rect((screenW - width) * 0.5f, screenH * (1f - CompactInset) - height, width, height);
+            Rect area;
+            if (FourTables && TrySpawnScreen(out Rect spawn))
+                area = new Rect(spawn.center.x / scale - width * 0.5f, spawn.center.y / scale - height * 0.5f, width, height);
+            else
+                area = new Rect((screenW - width) * 0.5f, screenH * (1f - CompactInset) - height, width, height);
+            var previous = GUI.matrix;
+            PushMatrix(scale, area);
             GUILayout.BeginArea(area, _panel);
             GUILayout.BeginHorizontal();
             var tall = GUILayout.Height(CompactButtonHeight);
@@ -227,6 +397,7 @@ namespace CityTwin.Calibration
             if (GUILayout.Button("MENU", _button, tall)) Later(() => _sensors.ShowVerify());
             GUILayout.EndHorizontal();
             GUILayout.EndArea();
+            GUI.matrix = previous;
         }
 
         /// <summary>A small way back when the panel is hidden to see the whole table.</summary>
@@ -235,8 +406,11 @@ namespace CityTwin.Calibration
             EnsureStyles();
             float scale = Scale;
             var previousMatrix = GUI.matrix;
-            GUI.matrix = Matrix4x4.Scale(new Vector3(scale, scale, 1f));
-            if (GUI.Button(new Rect(Margin, Margin, 200f, RowHeight), "MENU  (H)", _button)) _controller.TextVisible = true;
+            var button = new Rect(Margin, Margin, 200f, RowHeight);
+            if (FourTables && TrySpawnScreen(out Rect spawn))
+                button = new Rect(spawn.center.x / scale - 100f, spawn.center.y / scale - RowHeight * 0.5f, 200f, RowHeight);
+            PushMatrix(scale, button);
+            if (GUI.Button(button, "MENU  (H)", _button)) _controller.TextVisible = true;
             GUI.matrix = previousMatrix;
         }
 
@@ -265,7 +439,7 @@ namespace CityTwin.Calibration
                 }
                 else if (e.type == EventType.MouseDrag)
                 {
-                    ApplyPointer(e.mousePosition, scale);
+                    ApplyPointer(scale);
                     e.Use();
                 }
                 return;
@@ -281,15 +455,26 @@ namespace CityTwin.Calibration
             _pointerMoved = false;
             _resizeX = resizeX;
             _resizeY = resizeY;
-            _pressMouse = Event.current.mousePosition;
+            _pressScreen = ScreenMouse();
             _pressRect = panel;
             GUIUtility.hotControl = control;
             Event.current.Use();
         }
 
-        private void ApplyPointer(Vector2 mouse, float scale)
+        // Event.mousePosition is already run through the inverse of GUI.matrix. Reading it across events
+        // mixes two different pivots once the panel moves, and the 180° turn makes that delta point backwards.
+        private static Vector2 ScreenMouse()
         {
-            Vector2 delta = mouse - _pressMouse;
+            Vector3 p = GUI.matrix.MultiplyPoint(Event.current.mousePosition);
+            return new Vector2(p.x, p.y);
+        }
+
+        private void ApplyPointer(float scale)
+        {
+            Vector2 delta = (ScreenMouse() - _pressScreen) / Mathf.Max(0.01f, scale);
+            // After the half turn the grabbed edge is the opposite side of the layout rect.
+            if (FourTables && (_resizeX != 0 || _resizeY != 0))
+                delta = -delta;
             Rect r = _pressRect;
             float screenW = Screen.width / scale, screenH = Screen.height / scale;
 
@@ -317,6 +502,9 @@ namespace CityTwin.Calibration
                 r.height = Limit(r.height - delta.y, MinPanelHeight, bottom);
                 r.y = bottom - r.height;
             }
+
+            r.x = Mathf.Clamp(r.x, 0f, Mathf.Max(0f, screenW - r.width));
+            r.y = Mathf.Clamp(r.y, 0f, Mathf.Max(0f, screenH - r.height));
 
             _placed = true;
             _pointerMoved = true;

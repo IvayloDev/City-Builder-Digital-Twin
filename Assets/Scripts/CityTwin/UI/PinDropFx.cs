@@ -259,7 +259,7 @@ namespace CityTwin.UI
         // ── rings ──
 
         /// <summary>The echo ripple around a pin, without touching the pin itself.</summary>
-        public void EmitRipple(Transform pin, Color color, Transform layer = null)
+        public void EmitRipple(Transform pin, Color color, Transform layer = null, float sizeScale = 1f)
         {
             if (pin == null || pin.parent == null || !isActiveAndEnabled) return;
             Transform parent = layer != null ? layer : pin.parent;
@@ -268,6 +268,9 @@ namespace CityTwin.UI
             float pinRadius = PinRadius(pin);
             float radius = pinRadius > 1f ? pinRadius * radiusScale : fallbackRadius;
             float start = pinRadius > 1f ? pinRadius * startRadiusScale : radius * 0.25f;
+            float scale = Mathf.Max(0.01f, sizeScale);
+            radius *= scale;
+            start *= scale;
             if (!tintByCategory) color = ringColor;
             for (int i = 0; i < Mathf.Max(1, echoes); i++)
             {
@@ -275,12 +278,12 @@ namespace CityTwin.UI
                 float alpha = startAlpha * Mathf.Pow(echoDecay, i);
                 if (alpha <= 0.01f) break;
                 StartCoroutine(RingRoutine(parent, localPos, sibling, start, echoRadius,
-                    color, alpha, i * echoInterval / Mathf.Max(0.01f, speed)));
+                    color, alpha, i * echoInterval / Mathf.Max(0.01f, speed), scale));
             }
         }
 
         private IEnumerator RingRoutine(Transform parent, Vector3 localPos, int pinSibling, float from, float to,
-            Color color, float alpha, float delay)
+            Color color, float alpha, float delay, float sizeScale = 1f)
         {
             if (delay > 0f) yield return new WaitForSecondsRealtime(delay);
             if (parent == null) yield break;
@@ -300,7 +303,7 @@ namespace CityTwin.UI
                 float u = Mathf.Clamp01(t / life);
                 float grow = 1f - Mathf.Pow(1f - u, expansionRate);
                 ring.Radius = Mathf.Lerp(from, to, grow);
-                ring.StrokeWidth = Mathf.Lerp(strokeStart, strokeEnd, u);
+                ring.StrokeWidth = Mathf.Lerp(strokeStart, strokeEnd, u) * sizeScale;
                 ring.color = new Color(color.r, color.g, color.b, alpha * Mathf.Pow(1f - u, decay));
                 t += Time.unscaledDeltaTime;
                 yield return null;

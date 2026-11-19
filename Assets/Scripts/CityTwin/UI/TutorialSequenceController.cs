@@ -246,15 +246,15 @@ namespace CityTwin.UI
             if (_sequenceRoutine != null) StopCoroutine(_sequenceRoutine);
             if (_interruptRoutine != null) { StopCoroutine(_interruptRoutine); _interruptRoutine = null; }
 
-            // Round begins: the palette pins and SKIP ease in instead of popping into existence.
+            // SKIP stays hidden until the android walks in; PlaceSkipBesideAndroid only sets type, width, and the bubble frame.
             if (skipButton != null)
             {
                 skipButton.SetActive(true);
+                PlaceSkipBesideAndroid();
                 var cg = skipButton.GetComponent<CanvasGroup>();
                 if (cg == null) cg = skipButton.AddComponent<CanvasGroup>();
                 DOTween.Kill(cg);
                 cg.alpha = 0f;
-                cg.DOFade(1f, revealFadeSeconds).SetDelay(revealFadeDelay + 0.6f).SetUpdate(true).SetTarget(cg);
             }
             if (revealOnGameStart != null)
             {
@@ -364,14 +364,20 @@ namespace CityTwin.UI
 
                 if (!avatarShown && popup.HasSplitParts)
                 {
-                    // The assistant walks in first, beat, then speaks.
+                    // The assistant walks in first, beat, then speaks. SKIP fades in with the android.
                     var avatarTween = popup.PlayAvatarShowTween();
+                    RevealSkipWithAndroid(avatarTween);
                     if (avatarTween != null) yield return avatarTween.WaitForCompletion(true);
                     yield return new WaitForSeconds(0.5f);
                     avatarShown = true;
                 }
 
                 var showTween = popup.HasSplitParts ? popup.PlayBubbleShowTween() : popup.PlayShowTween();
+                if (!avatarShown)
+                {
+                    RevealSkipWithAndroid(showTween);
+                    avatarShown = true;
+                }
                 if (showTween != null) yield return showTween.WaitForCompletion(true);
 
                 // Step visual: fire alongside the text, once the popup has landed.
@@ -542,9 +548,7 @@ namespace CityTwin.UI
 
         private bool _gateTilePlaced;
         private GameObject _rippleHint;
-        private GameObject _rippleMarker;
         private Coroutine _rippleRoutine;
-        private static Sprite _ringSprite;
 
         [Tooltip("Color of the small glowing ring marking the placement-hint spot.")]
         [SerializeField] private Color rippleMarkerColor = new Color(0.35f, 0.9f, 1f, 0.9f);
@@ -613,12 +617,12 @@ namespace CityTwin.UI
         [Tooltip("Seconds between consecutive hub pops when the hubSpawn tutorial step brings the centers in.")]
         [SerializeField] private float hubSpawnStagger = 0.25f;
 
-        /// <summary>qolDemo beat: Budget blinks first, Time follows once it settles.</summary>
+        /// <summary>qolDemo beat: Budget pulses green first, Time starts only after that settles.</summary>
         private IEnumerator BudgetThenTimerBlink()
         {
-            dashboard.HighlightBudget(1.2f);
-            yield return new WaitForSeconds(1.6f);
-            dashboard.HighlightTimer(1.2f);
+            float budget = dashboard.PlayBudgetAttention();
+            yield return new WaitForSeconds(budget + 0.3f);
+            dashboard.PlayTimerAttention();
         }
 
         /// <summary>"hubSpawn" step action: the city centers pop in one by one, each with a glow
@@ -863,83 +867,166 @@ namespace CityTwin.UI
 
         // ===================== Placement-hint ripple =====================
 
-        /// <summary>Invisible interactor circling near the bottom of the play area; the liquid surface
-        /// turns its motion into a beckoning ripple ("put a tile here").</summary>
-        private void StartRippleHint()
+        /// <summary>SKIP keeps the editor placement. The label hugs the word, and a rounded stroke — not the speech-balloon tail — is drawn to that same length.</summary>
+        private void PlaceSkipBesideAndroid()
         {
-            if (_rippleHint != null || contentRoot == null) return;
-            var liquid = GetComponent<LiquidSurface>() ?? GetComponentInParent<LiquidSurface>();
-            if (liquid == null) return;
-
-            _rippleHint = new GameObject("TutorialRippleHint");
-            var t = _rippleHint.transform;
-            t.SetParent(contentRoot, false);
-            Vector2 center = new Vector2(
-                contentRoot.rect.xMax * Mathf.Clamp(rippleHintXFraction, -1f, 1f),
-                contentRoot.rect.yMin * Mathf.Clamp01(rippleHintYFraction) - rippleHintYExtraPx);
-            t.localPosition = center;
-            liquid.AddInteractor(_rippleHint); // interactor list drops it automatically once destroyed
-
-            SpawnRippleMarker(center);
-            _rippleRoutine = StartCoroutine(RippleHintOrbit(t, center));
-        }
-
-        /// <summary>Small breathing ring outline (no icon) that marks the hint spot at the ripple's center.</summary>
-        private void SpawnRippleMarker(Vector2 center)
-        {
-            _rippleMarker = new GameObject("TutorialRippleMarker", typeof(RectTransform));
-            var rt = (RectTransform)_rippleMarker.transform;
-            rt.SetParent(contentRoot, false);
-            rt.anchorMin = rt.anchorMax = new Vector2(0.5f, 0.5f);
-            rt.pivot = new Vector2(0.5f, 0.5f);
-            rt.localPosition = center;
-            rt.sizeDelta = new Vector2(rippleMarkerSize, rippleMarkerSize);
-
-            var img = _rippleMarker.AddComponent<Image>();
-            img.sprite = GetOrBuildRingSprite();
-            img.color = rippleMarkerColor;
-            img.raycastTarget = false;
-
-            // gentle breath: scale + alpha, looping until the first tile lands
-            rt.localScale = Vector3.one * 0.85f;
-            rt.DOScale(1.15f, 0.9f).SetEase(Ease.InOutSine).SetLoops(-1, LoopType.Yoyo).SetTarget(rt);
-            img.DOFade(rippleMarkerColor.a * 0.45f, 0.9f).SetEase(Ease.InOutSine).SetLoops(-1, LoopType.Yoyo).SetTarget(img);
-        }
-
-        /// <summary>Procedural soft ring outline sprite (cached).</summary>
-        private static Sprite GetOrBuildRingSprite()
-        {
-            if (_ringSprite != null) return _ringSprite;
-            const int size = 64;
-            const float radius = 26f, thickness = 3.5f;
-            var tex = new Texture2D(size, size, TextureFormat.RGBA32, false)
-            { filterMode = FilterMode.Bilinear, wrapMode = TextureWrapMode.Clamp };
-            var px = new Color32[size * size];
-            float c = (size - 1) * 0.5f;
-            for (int y = 0; y < size; y++)
+            var rt = skipButton.transform as RectTransform;
+            var label = skipButton.GetComponentInChildren<TextMeshProUGUI>(true);
+            if (label != null)
             {
-                for (int x = 0; x < size; x++)
+                label.fontStyle = FontStyles.Bold;
+                label.fontSize = 48f;
+                label.characterSpacing = 6f;
+                label.alignment = TextAlignmentOptions.MidlineRight;
+                label.textWrappingMode = TextWrappingModes.NoWrap;
+                label.color = Color.white;
+            }
+            if (rt != null) rt.localScale = Vector3.one * 0.6f;
+            if (label == null || rt == null) return;
+
+            label.ForceMeshUpdate();
+            float textW = Mathf.Max(1f, label.preferredWidth);
+            float textH = Mathf.Max(1f, label.preferredHeight);
+            float hostW = rt.rect.width > 1f ? rt.rect.width : rt.sizeDelta.x;
+            float hostH = rt.rect.height > 1f ? rt.rect.height : rt.sizeDelta.y;
+            // Right edge and vertical center stay. The rect is exactly the word, so a longer translation grows left.
+            var textRt = label.rectTransform;
+            textRt.offsetMax = new Vector2(0f, (textH - hostH) * 0.5f);
+            textRt.offsetMin = new Vector2(hostW - textW, (hostH - textH) * 0.5f);
+            ApplySkipOutline(rt, textRt, textH);
+        }
+
+        /// <summary>Language-button capsule behind the word. The round ends sit outside the letters, and the straight middle is exactly the text width.</summary>
+        private void ApplySkipOutline(RectTransform button, RectTransform textRt, float textH)
+        {
+            var plate = button.GetComponent<Image>();
+            if (plate != null)
+            {
+                var plateColor = plate.color;
+                plateColor.a = 0f;
+                plate.color = plateColor;
+                plate.raycastTarget = false;
+            }
+
+            var outline = button.Find("Skip Outline") as RectTransform;
+            if (outline == null)
+            {
+                var go = new GameObject("Skip Outline", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
+                outline = go.GetComponent<RectTransform>();
+                outline.SetParent(button, false);
+                outline.SetAsFirstSibling();
+            }
+
+            outline.anchorMin = textRt.anchorMin;
+            outline.anchorMax = textRt.anchorMax;
+            outline.pivot = textRt.pivot;
+
+            var img = outline.GetComponent<Image>();
+            img.sprite = GetSkipPill();
+            img.type = Image.Type.Sliced;
+            img.pixelsPerUnitMultiplier = 1f;
+            img.color = Color.white;
+            img.raycastTarget = true;
+
+            // Shorter than a circle, in the language-button proportion. Radius is half the height so the ends stay round.
+            const float radius = 49f;
+            const float pillH = radius * 2f + 2f;
+            float padY = (pillH - textH) * 0.5f;
+            outline.offsetMin = textRt.offsetMin - new Vector2(radius, padY);
+            outline.offsetMax = textRt.offsetMax + new Vector2(radius, padY);
+
+            var click = button.GetComponent<Button>();
+            if (click != null) click.targetGraphic = img;
+        }
+
+        private static Sprite _skipPill;
+
+        /// <summary>Stadium in the language-button colors: dark fill, thin cyan stroke, semicircle ends. Nine-sliced so only the middle grows with the word.</summary>
+        private static Sprite GetSkipPill()
+        {
+            if (_skipPill != null) return _skipPill;
+            const int radius = 49;
+            const int cap = 2;
+            const int stroke = 3;
+            int w = radius * 2 + cap;
+            int h = radius * 2 + cap;
+            var tex = new Texture2D(w, h, TextureFormat.RGBA32, false)
+            { filterMode = FilterMode.Bilinear, wrapMode = TextureWrapMode.Clamp };
+            var fill = new Color32(8, 8, 35, 255);
+            var line = new Color32(0, 255, 255, 255);
+            var px = new Color32[w * h];
+            for (int y = 0; y < h; y++)
+            {
+                for (int x = 0; x < w; x++)
                 {
-                    float d = Mathf.Abs(Mathf.Sqrt((x - c) * (x - c) + (y - c) * (y - c)) - radius);
-                    float a = Mathf.Clamp01(1f - (d - thickness * 0.5f)); // 1px soft edge
-                    px[y * size + x] = new Color32(255, 255, 255, (byte)(a * 255));
+                    float sd = StadiumEdge(x + 0.5f, y + 0.5f, w, h, radius);
+                    if (sd > 1f) px[y * w + x] = new Color32(0, 0, 0, 0);
+                    else if (sd > 0f) px[y * w + x] = new Color32(line.r, line.g, line.b, (byte)((1f - sd) * 255f));
+                    else if (sd > -stroke) px[y * w + x] = line;
+                    else if (sd > -stroke - 1f) px[y * w + x] = Color32.Lerp(fill, line, sd + stroke + 1f);
+                    else px[y * w + x] = fill;
                 }
             }
             tex.SetPixels32(px);
             tex.Apply(false, true);
-            _ringSprite = Sprite.Create(tex, new Rect(0, 0, size, size), new Vector2(0.5f, 0.5f), 100f, 0, SpriteMeshType.FullRect);
-            _ringSprite.name = "TutorialHintRing";
-            return _ringSprite;
+            var border = new Vector4(radius, radius, radius, radius);
+            _skipPill = Sprite.Create(tex, new Rect(0, 0, w, h), new Vector2(0.5f, 0.5f), 100f, 0, SpriteMeshType.FullRect, border);
+            _skipPill.name = "SkipPill";
+            return _skipPill;
         }
 
-        private IEnumerator RippleHintOrbit(Transform t, Vector2 center)
+        /// <summary>Signed distance to a stadium edge. Negative is inside. The ends are circles of <paramref name="radius"/>.</summary>
+        private static float StadiumEdge(float x, float y, int w, int h, float radius)
         {
-            float a = 0f;
-            while (t != null)
+            float left = radius;
+            float right = w - radius;
+            float cy = h * 0.5f;
+            float px = Mathf.Clamp(x, left, right);
+            float dx = x - px;
+            float dy = y - cy;
+            return Mathf.Sqrt(dx * dx + dy * dy) - radius;
+        }
+
+        /// <summary>SKIP fades in on the same beat as the android's entrance.</summary>
+        private void RevealSkipWithAndroid(Tween avatarTween)
+        {
+            if (skipButton == null || !skipButton.activeSelf) return;
+            var cg = skipButton.GetComponent<CanvasGroup>();
+            if (cg == null) cg = skipButton.AddComponent<CanvasGroup>();
+            DOTween.Kill(cg);
+            float dur = avatarTween != null ? Mathf.Max(0.05f, avatarTween.Duration(false)) : 0.38f;
+            cg.alpha = 0f;
+            cg.DOFade(1f, dur).SetEase(Ease.OutQuad).SetUpdate(true).SetTarget(cg);
+        }
+
+        /// <summary>The drop spot keeps throwing the same pin-drop strokes until the first tile lands.</summary>
+        private void StartRippleHint()
+        {
+            if (_rippleHint != null || contentRoot == null) return;
+
+            _rippleHint = new GameObject("TutorialRippleHint", typeof(RectTransform));
+            var rt = (RectTransform)_rippleHint.transform;
+            rt.SetParent(contentRoot, false);
+            rt.anchorMin = rt.anchorMax = new Vector2(0.5f, 0.5f);
+            rt.pivot = new Vector2(0.5f, 0.5f);
+            rt.localPosition = new Vector2(
+                contentRoot.rect.xMax * Mathf.Clamp(rippleHintXFraction, -1f, 1f),
+                contentRoot.rect.yMin * Mathf.Clamp01(rippleHintYFraction) - rippleHintYExtraPx);
+
+            var liquid = GetComponent<LiquidSurface>() ?? GetComponentInParent<LiquidSurface>();
+            if (liquid != null) liquid.AddInteractor(_rippleHint);
+
+            _rippleRoutine = StartCoroutine(RippleHintPulse(rt));
+        }
+
+        private IEnumerator RippleHintPulse(RectTransform spot)
+        {
+            var fx = PinDropFx.Find(spot);
+            while (spot != null)
             {
-                a += Time.deltaTime * rippleHintSpeed;
-                t.localPosition = center + new Vector2(Mathf.Cos(a), Mathf.Sin(a)) * rippleHintRadius;
-                yield return null;
+                if (fx == null || !fx.isActiveAndEnabled) fx = PinDropFx.Find(spot);
+                if (fx != null) fx.EmitRipple(spot, rippleMarkerColor, null, 2f);
+                yield return new WaitForSecondsRealtime(0.75f);
             }
         }
 
@@ -947,14 +1034,6 @@ namespace CityTwin.UI
         {
             if (_rippleRoutine != null) { StopCoroutine(_rippleRoutine); _rippleRoutine = null; }
             if (_rippleHint != null) { Destroy(_rippleHint); _rippleHint = null; }
-            if (_rippleMarker != null)
-            {
-                _rippleMarker.transform.DOKill(false);
-                var img = _rippleMarker.GetComponent<Image>();
-                if (img != null) img.DOKill(false);
-                Destroy(_rippleMarker);
-                _rippleMarker = null;
-            }
         }
 
         // ===================== Live feedback =====================

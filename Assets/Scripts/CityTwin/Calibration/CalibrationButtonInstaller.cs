@@ -40,6 +40,8 @@ namespace CityTwin.Calibration
 
             foreach (var restart in restarts)
             {
+                // The four-table setup switches this off; don't put a config button back on a bare table.
+                if (!restart.gameObject.activeInHierarchy) continue;
                 Transform parent = restart.transform.parent;
                 if (parent == null || parent.Find(CloneName) != null) continue;
 

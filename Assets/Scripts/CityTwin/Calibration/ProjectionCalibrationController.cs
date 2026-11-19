@@ -186,6 +186,7 @@ namespace CityTwin.Calibration
             AnyOpen = true;
             _sensorTab.Hold();
             SyncProjectorToArea();
+            _menu.RecenterOnSpawnScreen();
             RememberGeometry();
             CreateOverlays();
             ApplyPatternAndTint();

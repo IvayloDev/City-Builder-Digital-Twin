@@ -15,7 +15,8 @@ namespace CityTwin.Calibration
     /// Disable this component to get the original unwarped output back (e.g. for mouse testing or NDI/Resolume).
     /// Game code is untouched: everything happens after the table image is rendered.
     /// Also applies the table setup's play areas on scene load (games not in the setup are switched off), even
-    /// while the component itself is disabled. Runs early so they are off before they initialise.
+    /// while the component itself is disabled. The two-projector setup seats the four games around the table
+    /// first, so each one awakes on its own wedge. Runs early so they are off before they initialise.
     /// </summary>
     [DefaultExecutionOrder(-10000)]
     public class ProjectionOutputRig : MonoBehaviour
@@ -110,13 +111,23 @@ namespace CityTwin.Calibration
         private void ApplyPlayAreas()
         {
             var setup = ActiveSetup;
+            var roots = new List<GameInstanceRoot>();
             foreach (var root in FindObjectsByType<GameInstanceRoot>(FindObjectsInactive.Include, FindObjectsSortMode.None))
             {
                 if (root.gameObject.scene != gameObject.scene) continue;
+                roots.Add(root);
+            }
+            // Place and strip the surrounding chrome before SetActive, so a game that was off
+            // awakes as a bare table on its wedge, not on the stacked scene pose.
+            TablePlayAreaLayout.HideSurroundings(roots, setup);
+            int placed = TablePlayAreaLayout.Arrange(setup, roots);
+            foreach (var root in roots)
+            {
                 bool run = setup.RunsPlayArea(root.InstanceId);
                 if (root.gameObject.activeSelf != run) root.gameObject.SetActive(run);
             }
-            Debug.Log($"[ProjectionOutputRig] Setup '{setup.Id}' ({_setupSource}): play areas {setup.PlayAreaList}.", this);
+            Debug.Log($"[ProjectionOutputRig] Setup '{setup.Id}' ({_setupSource}): play areas {setup.PlayAreaList}" +
+                      (placed > 0 ? $", seated {placed} around the table." : "."), this);
         }
 
         private void OnEnable()

@@ -323,6 +323,87 @@ public class DashboardController : MonoBehaviour
         ScalePulse(budgetText.transform, seconds);
     }
 
+    /// <summary>Tutorial beat: the budget cluster blinks green and scales up and down, then returns. Returns how long the pulses take.</summary>
+    public float PlayBudgetAttention() => PlayGreenAttention(budgetText);
+
+    /// <summary>Tutorial beat: the timer cluster blinks green and scales up and down, then returns. Returns how long the pulses take.</summary>
+    public float PlayTimerAttention() => PlayGreenAttention(timerText);
+
+    /// <summary>Three green pulses on a readout and its group. Scale stays pinned to the text center.</summary>
+    private float PlayGreenAttention(TMP_Text label)
+    {
+        if (label == null) return 0f;
+        Transform text = label.transform;
+        Transform group = text.parent != null ? text.parent : text;
+
+        if (!_pillarBaseScales.TryGetValue(group, out Vector3 baseScale))
+        {
+            baseScale = group.localScale;
+            _pillarBaseScales[group] = baseScale;
+        }
+
+        var graphics = group.GetComponentsInChildren<Graphic>(true);
+        var originals = new Color[graphics.Length];
+        for (int i = 0; i < graphics.Length; i++)
+        {
+            if (graphics[i] == null) continue;
+            originals[i] = graphics[i].color;
+            graphics[i].DOKill(false);
+        }
+
+        group.DOKill(false);
+        group.localScale = baseScale;
+        Vector3 basePosition = group.position;
+        Vector3 anchor = text.position;
+        float scale = 1f;
+
+        const int blinks = 3;
+        const float half = 0.34f;
+        const float peak = 1.275f;
+        var green = new Color(0.3f, 1f, 0.4f, 1f);
+
+        var seq = DOTween.Sequence().SetTarget(group).SetUpdate(true);
+        for (int b = 0; b < blinks; b++)
+        {
+            seq.Append(DOTween.To(() => scale, s =>
+            {
+                scale = s;
+                if (group == null || text == null) return;
+                group.localScale = baseScale * s;
+                group.position -= text.position - anchor;
+            }, peak, half).SetEase(Ease.OutQuad));
+            for (int i = 0; i < graphics.Length; i++)
+            {
+                if (graphics[i] == null) continue;
+                seq.Join(graphics[i].DOColor(green, half).SetEase(Ease.OutQuad));
+            }
+            seq.Append(DOTween.To(() => scale, s =>
+            {
+                scale = s;
+                if (group == null || text == null) return;
+                group.localScale = baseScale * s;
+                group.position -= text.position - anchor;
+            }, 1f, half).SetEase(Ease.InQuad));
+            for (int i = 0; i < graphics.Length; i++)
+            {
+                int idx = i;
+                if (graphics[idx] == null) continue;
+                seq.Join(graphics[idx].DOColor(originals[idx], half).SetEase(Ease.InQuad));
+            }
+        }
+        seq.OnKill(() =>
+        {
+            if (group != null)
+            {
+                group.localScale = baseScale;
+                group.position = basePosition;
+            }
+            for (int i = 0; i < graphics.Length; i++)
+                if (graphics[i] != null) graphics[i].color = originals[i];
+        });
+        return blinks * half * 2f;
+    }
+
     /// <summary>Size punch riding a highlight flash: up to highlightScalePeak and back over the
     /// flash duration. Base scales are cached (same map as PunchPillar) so repeats never compound.</summary>
     private void ScalePulse(Transform target, float seconds)

@@ -1,4 +1,5 @@
 #if UNITY_INCLUDE_TESTS
+using System.Collections.Generic;
 using System.IO;
 using NUnit.Framework;
 using UnityEngine;
@@ -61,6 +62,47 @@ namespace CityTwin.Tests
             for (int i = 0; i < 4; i++) Assert.That(TableSetups.TestRig.RunsPlayArea(i), Is.True, $"game {i + 1}");
             Assert.That(TableSetups.Pilot.PlayAreaList, Is.EqualTo("1"));
             Assert.That(TableSetups.TestRig.PlayAreaList, Is.EqualTo("1, 2, 3, 4"));
+        }
+
+        [Test]
+        public void FourWedges_SitOnFourSidesOfOneCircle()
+        {
+            // Fan art hangs below the circle centre in the prefab. After seating, the four centres
+            // must be down, right, up and left, far enough apart that the fans do not stack.
+            var circleCenter = new Vector2(0f, 91f);
+            var fanInRoot = new Vector3(0f, -1270f, 0f);
+            var centers = new Vector2[4];
+            for (int i = 0; i < 4; i++)
+            {
+                var pivot = TablePlayAreaLayout.PivotFor(i, circleCenter, Vector2.zero);
+                var rot = Quaternion.Euler(0f, 0f, TablePlayAreaLayout.WedgeAngle(i));
+                centers[i] = pivot + (Vector2)(rot * fanInRoot);
+            }
+
+            Assert.That(centers[0].y, Is.LessThan(-1000f));
+            Assert.That(Mathf.Abs(centers[0].x), Is.LessThan(200f));
+            Assert.That(centers[1].x, Is.GreaterThan(1000f));
+            Assert.That(centers[2].y, Is.GreaterThan(1000f));
+            Assert.That(centers[3].x, Is.LessThan(-1000f));
+            for (int i = 0; i < 4; i++)
+                for (int j = i + 1; j < 4; j++)
+                    Assert.That(Vector2.Distance(centers[i], centers[j]), Is.GreaterThan(1500f), $"{i} vs {j}");
+        }
+
+        [Test]
+        public void CircleFit_RecoversAKnownCircle()
+        {
+            var points = new List<Vector2>();
+            var expected = new Vector2(5f, -7f);
+            for (int i = 0; i < 24; i++)
+            {
+                float a = i / 24f * Mathf.PI * 0.8f - 2f;
+                points.Add(expected + new Vector2(Mathf.Cos(a), Mathf.Sin(a)) * 100f);
+            }
+            Assert.That(TablePlayAreaLayout.TryFitCircle(points, out Vector2 center, out float radius), Is.True);
+            Assert.That(center.x, Is.EqualTo(expected.x).Within(0.5f));
+            Assert.That(center.y, Is.EqualTo(expected.y).Within(0.5f));
+            Assert.That(radius, Is.EqualTo(100f).Within(0.5f));
         }
 
         [Test]

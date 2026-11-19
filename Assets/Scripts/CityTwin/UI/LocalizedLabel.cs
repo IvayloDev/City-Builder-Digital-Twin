@@ -22,24 +22,19 @@ namespace CityTwin.UI
         [Tooltip("If set, this text is updated. Otherwise uses TextMeshProUGUI or Text on this GameObject.")]
         [SerializeField] private TextMeshProUGUI targetTmp;
 
-        private void Awake()
-        {
-            if (localization == null)
-            {
-                var root = GetComponentInParent<GameInstanceRoot>(true);
-                if (root != null)
-                    localization = root.LocalizationService;
-            }
-            // The tooltip has always promised this fallback; without it a label with no explicit
-            // target silently does nothing (several end-screen labels were dormant because of it).
-            if (targetTmp == null)
-                targetTmp = GetComponent<TextMeshProUGUI>();
-        }
+        private void Awake() => Bind();
 
         private void OnEnable()
         {
-            if (localization != null)
-                localization.OnLanguageChanged += Refresh;
+            Bind();
+            Refresh();
+        }
+
+        private void Start()
+        {
+            // Config often finishes loading between OnEnable and Start. Refresh again so a label
+            // that only saw the raw key on the first pass picks up the real string.
+            Bind();
             Refresh();
         }
 
@@ -49,6 +44,21 @@ namespace CityTwin.UI
                 localization.OnLanguageChanged -= Refresh;
         }
 
+        private void Bind()
+        {
+            if (localization == null)
+            {
+                var root = GetComponentInParent<GameInstanceRoot>(true);
+                if (root != null)
+                    localization = root.LocalizationService;
+            }
+            if (targetTmp == null)
+                targetTmp = GetComponent<TextMeshProUGUI>();
+            if (localization == null) return;
+            localization.OnLanguageChanged -= Refresh;
+            localization.OnLanguageChanged += Refresh;
+        }
+
         /// <summary>Set the key and refresh (e.g. from code).</summary>
         public void SetKey(string key)
         {
@@ -56,15 +66,15 @@ namespace CityTwin.UI
             Refresh();
         }
 
-        /// <summary>Apply the current language string to the target text.</summary>
+        /// <summary>Apply the current language string to the target text. An unresolved key leaves the authored label alone.</summary>
         public void Refresh()
         {
-            string text = localization != null && !string.IsNullOrEmpty(localizationKey)
-                ? localization.GetString(localizationKey)
-                : localizationKey;
-
-            if (targetTmp != null)
-                targetTmp.text = text;
+            if (targetTmp == null || string.IsNullOrEmpty(localizationKey)) return;
+            if (localization == null) Bind();
+            if (localization == null) return;
+            string text = localization.GetString(localizationKey);
+            if (string.IsNullOrEmpty(text) || text == localizationKey) return;
+            targetTmp.text = text;
         }
     }
 }
